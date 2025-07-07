@@ -36,6 +36,12 @@ impl std::fmt::Display for ServerError {
 
 impl std::error::Error for ServerError {}
 
+impl From<std::io::Error> for ServerError {
+    fn from(err: std::io::Error) -> Self {
+        Self::IO(err)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HttpMethod {
     Head,

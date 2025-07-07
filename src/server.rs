@@ -43,76 +43,49 @@ impl<'a> Service<'a> {
 }
 
 pub struct Server<'a> {
-    // socket: TcpListener,
-    // workers: Vec<ThreadHandle>,
-    threads: Vec<ThreadHandle>,
-    addr: Ipv4Addr,
-    port: u16,
-    max_allowed_threads: usize,
+    /// the server tcp listener socket
+    socket: TcpListener,
+    // container for active workers that are currently occupied with handling some clients
+    workers: Vec<WorkerHandle>,
+    // container of idle workers that are not curretly handling any stream
+    idle: Vec<WorkerHandle>,
+    /// max number of allowed workers both idle + active
+    max: usize,
+    /// container for the server services
     services: Vec<Service<'a>>,
 }
 
-impl<'a> Default for Server<'a> {
-    fn default() -> Self {
-        Self {
-            threads: Vec::with_capacity(10_000),
-            max_allowed_threads: 10000,
-            addr: [127, 0, 0, 1].into(),
-            port: 8883,
-            services: vec![],
-        }
-    }
-}
-
 impl<'a> Server<'a> {
-    fn new(max: usize, init_capa: usize, addr: [u8; 4], port: u16) -> Result<Self, ServerError> {
-        if init_capa > max {
-            return Err(ServerError::InitialThreadCapacityHigherThanMaximumThreadsAllowed);
-        }
-
+    /// creates a new server
+    /// ```
+    /// let (addr, port) = ([127.0.0.1], 8883);
+    /// let max = 90000;
+    /// let server = Server::new(max, addr, port)
+    /// ```
+    pub fn new(addr: impl Into<Ipv4Addr>, port: u16, max: usize) -> Result<Self, ServerError> {
         Ok(Self {
-            threads: Vec::with_capacity(init_capa),
-            max_allowed_threads: max,
-            addr: addr.into(),
-            port,
+            socket: TcpListener::bind((addr.into(), port))?,
+            workers: Vec::with_capacity(max),
+            idle: Vec::with_capacity(max),
+            max,
             services: vec![],
         })
     }
 
     pub fn worker(&mut self) {
-        let (addr, port) = (self.addr, self.port);
         let services = &self.services;
-        let worker = ServiceWorker::new(addr, port).unwrap();
-        worker.listen(services);
+        self.serve();
     }
 
+    /// pushes a new service to the server
     pub fn service(&mut self, service: Service<'a>) {
         self.services.push(service);
     }
 }
 
-type ThreadHandle = JoinHandle<Result<(), ServerError>>;
+type WorkerHandle = JoinHandle<Result<(), ServerError>>;
 
-#[derive(Debug)]
-pub struct ServiceWorker {
-    socket: TcpListener,
-}
-
-// impl Default for ServiceWorker {
-//     fn default() -> Self {
-//         Self {
-//             socket: TcpListener::bind(DEF_ADDR_PORT).unwrap(),
-//         }
-//     }
-// }
-
-impl ServiceWorker {
-    fn new(addr: Ipv4Addr, port: u16) -> Result<Self, ServerError> {
-        TcpListener::bind((addr, port))
-            .map(|socket| Self { socket })
-            .map_err(|e| ServerError::IO(e))
-    }
-
+impl<'a> Server<'a> {
     fn try_listen(&self, services: &[Service]) {
         loop {
             std::thread::sleep(std::time::Duration::from_millis(600));
@@ -123,17 +96,17 @@ impl ServiceWorker {
         }
     }
 
-    fn listen(&self, services: &[Service]) {
+    fn serve(&self) {
         self.socket
             .incoming()
             .filter(|stream| stream.is_ok())
             .map(|s| s.unwrap())
-            .map(|stream| (stream.try_clone().unwrap(), read_stream(&stream)))
-            .inspect(|(s, d)| println!("{}", d))
-            .for_each(|(mut stream, d)| {
+            .map(|stream| ( read_stream(&stream), stream))
+            .inspect(|(d, s )| println!("{}", d))
+            .for_each(|(d, mut stream)| {
                 let req = Request::parse(&d).unwrap();
                 println!("{:#?}", req);
-                services
+                self.services
                     .iter()
                     .filter(|s| s.method == req.method() && s.uri == req.uri())
                     .for_each(|s| {
