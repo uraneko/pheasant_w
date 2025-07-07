@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use super::{HttpMethod, ServerError};
 
@@ -12,6 +13,7 @@ pub struct Request<'a> {
 }
 
 impl<'a> Request<'a> {
+    // parses a new request instance from the request data string
     pub fn parse(req: &'a str) -> Result<Self, ServerError> {
         let mut lines = req.lines();
         let request_line = lines.next();

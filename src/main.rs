@@ -4,7 +4,7 @@ use pheasant::{HttpMethod, Server, Service};
 async fn main() {
     let mut phe = Server::new([127, 0, 0, 1], 8883, 3333).unwrap();
     phe.service(Service::new(HttpMethod::Get, "/hello", hello));
-    phe.worker();
+    phe.serve();
 }
 
 fn hello(who: String) -> String {

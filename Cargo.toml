@@ -8,5 +8,6 @@ name = "dev"
 path = "src/main.rs"
 
 [dependencies]
+crossbeam-channel = "0.5.15"
 serde = { version = "1.0.219", features = ["derive"] }
 tokio = { version = "1.46.1", features = ["full"] }

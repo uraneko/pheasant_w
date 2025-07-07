@@ -1,7 +1,6 @@
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
 use std::str::FromStr;
-use std::thread::JoinHandle;
 
 use super::{HttpMethod, ServerError, requests::Request};
 
@@ -45,12 +44,6 @@ impl<'a> Service<'a> {
 pub struct Server<'a> {
     /// the server tcp listener socket
     socket: TcpListener,
-    // container for active workers that are currently occupied with handling some clients
-    workers: Vec<WorkerHandle>,
-    // container of idle workers that are not curretly handling any stream
-    idle: Vec<WorkerHandle>,
-    /// max number of allowed workers both idle + active
-    max: usize,
     /// container for the server services
     services: Vec<Service<'a>>,
 }
@@ -65,16 +58,8 @@ impl<'a> Server<'a> {
     pub fn new(addr: impl Into<Ipv4Addr>, port: u16, max: usize) -> Result<Self, ServerError> {
         Ok(Self {
             socket: TcpListener::bind((addr.into(), port))?,
-            workers: Vec::with_capacity(max),
-            idle: Vec::with_capacity(max),
-            max,
             services: vec![],
         })
-    }
-
-    pub fn worker(&mut self) {
-        let services = &self.services;
-        self.serve();
     }
 
     /// pushes a new service to the server
@@ -83,56 +68,58 @@ impl<'a> Server<'a> {
     }
 }
 
-type WorkerHandle = JoinHandle<Result<(), ServerError>>;
-
 impl<'a> Server<'a> {
-    fn try_listen(&self, services: &[Service]) {
-        loop {
-            std::thread::sleep(std::time::Duration::from_millis(600));
-            if let Ok((stream, _)) = self.socket.accept() {
-                let data = read_stream(&stream);
-                println!("{}", data);
-            }
+    fn match_service(&self, method: HttpMethod, uri: &str) -> Option<&Service> {
+        self.services
+            .iter()
+            .find(|s| s.method == method && s.uri == uri)
+    }
+
+    pub fn serve(&self) {
+        for stream in self.socket.incoming().flatten() {
+            self.handle_stream(stream);
         }
     }
 
-    fn serve(&self) {
-        self.socket
-            .incoming()
-            .filter(|stream| stream.is_ok())
-            .map(|s| s.unwrap())
-            .map(|stream| ( read_stream(&stream), stream))
-            .inspect(|(d, s )| println!("{}", d))
-            .for_each(|(d, mut stream)| {
-                let req = Request::parse(&d).unwrap();
-                println!("{:#?}", req);
-                self.services
-                    .iter()
-                    .filter(|s| s.method == req.method() && s.uri == req.uri())
-                    .for_each(|s| {
-                        let param = req.params().unwrap().get("who").unwrap().to_string();
-                        let body = (s.callback)(param);
-                        println!("{:?}", body);
-                        let mut writer = BufWriter::new(&mut stream);
-                        let headers = format!(
-                            "HTTP/1.1 200 OK\nAccess-Control-Allow-Origin: *\nServer: pheasant\nContent-Length: {}\nContent-Type: text/html; charset=utf-8\r\n\r\n{}",
-                            body.len(), String::from_utf8_lossy(&body)
-                        );
-                        println!("{}", headers);
-                        writer.write(&headers.into_bytes()).unwrap();
-                        writer.flush().unwrap();
-                    })
-            });
+    fn handle_stream(&self, mut stream: TcpStream) {
+        let data = read_stream(&mut stream);
+        let req = Request::parse(&data).unwrap();
+        println!("{:#?}", req);
+
+        let service = self.match_service(req.method(), req.uri()).unwrap();
+        let param = req.params().unwrap().get("who").unwrap().to_string();
+        let payload = (service.callback)(param);
+        let response = format_response(payload, "text/html; charset=utf-8");
+        println!("{}", String::from_utf8_lossy(&response));
+
+        stream.write_all(&response).unwrap();
+        println!("wrote to client; {:?}", stream.take_error());
+
+        stream.flush().unwrap();
+        println!("flushed buffer; {:?}", stream.take_error());
     }
 }
 
-fn read_stream(s: &TcpStream) -> String {
-    // s.set_read_timeout(Some(std::time::Duration::from_secs(4)))
-    //     .unwrap();
-
-    let mut reader = BufReader::new(s);
+fn read_stream(s: &mut TcpStream) -> String {
     let mut buf = Vec::new();
-    reader.read_to_end(&mut buf).unwrap();
+    let mut reader = BufReader::new(s);
+    while buf.len() < 4 || buf[buf.len() - 4..] != [13, 10, 13, 10] {
+        reader.read_until(10, &mut buf).unwrap();
+        println!("{:?}", buf);
+    }
 
     String::from_utf8(buf).unwrap()
+}
+
+fn format_response(payload: Vec<u8>, ct: &str) -> Vec<u8> {
+    let cl = payload.len();
+    let mut res: Vec<u8> = format!(
+        "HTTP/1.1 200 OK\r\nAccept-Range: bytes\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n",
+        ct, cl
+    )
+    .into_bytes();
+    res.extend(payload);
+    res.extend([13, 10]);
+
+    res
 }
