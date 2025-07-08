@@ -76,7 +76,12 @@ impl<'a> Server<'a> {
 
                 TcpListener::bind((addr, port))?
             },
-            services: vec![],
+            services: vec![Service::new(
+                HttpMethod::Get,
+                "/not_found404.html",
+                "text/html",
+                not_found404,
+            )],
         })
     }
 
@@ -109,7 +114,9 @@ impl<'a> Server<'a> {
         // }
 
         // println!("method: {:?}, uri: {}", req.method(), req.uri());
-        let service = self.match_service(req.method(), req.uri()).unwrap();
+        let service = self
+            .match_service(req.method(), req.uri())
+            .unwrap_or(&self.services[0]);
         let param = req.take_params();
         let payload = (service.callback)(param);
         let response = format_response(payload, &service.mime);
@@ -125,13 +132,23 @@ impl<'a> Server<'a> {
 
 // BUG this will not read request body if any
 fn read_stream(s: &mut TcpStream) -> String {
-    let mut buf = Vec::new();
+    let mut data = Vec::new();
     let mut reader = BufReader::new(s);
-    while buf.len() < 4 || buf[buf.len() - 4..] != [13, 10, 13, 10] {
-        reader.read_until(10, &mut buf).unwrap();
+    let mut buf = [0; 1024];
+    loop {
+        let Ok(n) = reader.read(&mut buf) else { break };
+        if n < 1024 {
+            break {
+                data.extend(&buf[..n]);
+            };
+        }
+        data.extend(buf);
     }
+    // while buf.len() < 4 || buf[buf.len() - 4..] != [13, 10, 13, 10] {
+    //     reader.read_until(10, &mut buf).unwrap();
+    // }
 
-    String::from_utf8(buf).unwrap()
+    String::from_utf8(data).unwrap()
 }
 
 fn format_response(payload: Vec<u8>, ct: &str) -> Vec<u8> {
@@ -151,4 +168,14 @@ impl From<RequestParams> for () {
     fn from(_p: RequestParams) -> () {
         ()
     }
+}
+
+fn not_found404(_: ()) -> String {
+    let svg = std::fs::read_to_string("assets/404.svg").unwrap();
+    format!(
+        "{}",
+        std::fs::read_to_string("templates/404.html")
+            .unwrap()
+            .replace("{404.svg}", &svg)
+    )
 }
