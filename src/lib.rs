@@ -19,6 +19,11 @@ pub use server::{Server, Service};
 
 #[derive(Debug)]
 pub enum ServerError {
+    StreamReadCrached,
+    StreamReadWithExcess,
+    BytesParsingFailed,
+    RequestIsEmpty,
+    ExpectedRequestBody,
     InvalidIPAddr,
     RequestLineNotFound,
     BadRequestLine,

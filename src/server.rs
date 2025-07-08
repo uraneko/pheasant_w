@@ -1,6 +1,7 @@
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
 use std::str::FromStr;
+use std::string::FromUtf8Error;
 
 use serde::Serialize;
 
@@ -104,14 +105,11 @@ impl<'a> Server<'a> {
         }
     }
 
-    fn handle_stream(&'a self, mut stream: TcpStream) {
-        let data = read_stream(&mut stream);
+    fn handle_stream(&'a self, mut stream: TcpStream) -> Result<(), ServerError> {
+        let data = read_stream(&mut stream)?;
         println!("{{\n{}\n}}", data);
-        let mut req = Request::parse(data).unwrap();
+        let mut req = Request::parse(data)?;
         println!("{:#?}", req);
-        // if req.uri() == "/favicon.ico" {
-        //     return;
-        // }
 
         // println!("method: {:?}, uri: {}", req.method(), req.uri());
         let service = self
@@ -122,35 +120,42 @@ impl<'a> Server<'a> {
         let response = format_response(payload, &service.mime);
         // println!("{}", String::from_utf8_lossy(&response));
 
-        stream.write_all(&response).unwrap();
+        stream.write_all(&response)?;
         // println!("wrote to client; {:?}", stream.take_error());
-
-        stream.flush().unwrap();
+        stream.flush()?;
         // println!("flushed buffer; {:?}", stream.take_error());
+
+        Ok(())
     }
 }
 
 // BUG this will not read request body if any
-fn read_stream(s: &mut TcpStream) -> String {
+fn read_stream(s: &mut TcpStream) -> Result<String, ServerError> {
     let mut data = Vec::new();
     let mut reader = BufReader::new(s);
     let mut buf = [0; 1024];
     loop {
-        let Ok(n) = reader.read(&mut buf) else { break };
+        let Ok(n) = reader.read(&mut buf) else {
+            return Err(ServerError::StreamReadCrached);
+        };
         if n < 1024 {
-            break {
-                data.extend(&buf[..n]);
-            };
+            break data.extend(&buf[..n]);
+        } else if n > 1024 {
+            return Err(ServerError::StreamReadWithExcess);
         }
         data.extend(buf);
     }
-    // while buf.len() < 4 || buf[buf.len() - 4..] != [13, 10, 13, 10] {
-    //     reader.read_until(10, &mut buf).unwrap();
-    // }
 
-    String::from_utf8(data).unwrap()
+    String::from_utf8(data).map_err(|e| e.into())
 }
 
+impl From<FromUtf8Error> for ServerError {
+    fn from(_err: FromUtf8Error) -> Self {
+        Self::BytesParsingFailed
+    }
+}
+
+// TODO response builder
 fn format_response(payload: Vec<u8>, ct: &str) -> Vec<u8> {
     let cl = payload.len();
     let mut res: Vec<u8> = format!(

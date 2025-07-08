@@ -2,9 +2,9 @@
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
-   width="304.71844mm"
-   height="210.8611mm"
-   viewBox="0 0 304.71844 210.86109"
+   width="398.3497mm"
+   height="211.46516mm"
+   viewBox="0 0 398.34969 211.46515"
    version="1.1"
    id="svg1"
    inkscape:version="1.4.2 (ebf0e940d0, 2025-05-08)"
@@ -25,9 +25,9 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      showguides="true"
-     inkscape:zoom="0.770969"
-     inkscape:cx="593.40907"
-     inkscape:cy="484.45528"
+     inkscape:zoom="0.43799923"
+     inkscape:cx="855.02433"
+     inkscape:cy="791.09727"
      inkscape:window-width="1920"
      inkscape:window-height="1080"
      inkscape:window-x="0"
@@ -36,15 +36,27 @@
      inkscape:current-layer="layer1">
     <inkscape:page
        x="0"
-       y="5.2224698e-07"
-       width="304.71844"
-       height="210.86108"
+       y="1.2791454e-14"
+       width="398.3497"
+       height="211.46516"
        id="page1"
-       margin="0"
+       margin="0 0 0 0"
        bleed="0" />
   </sodipodi:namedview>
   <defs
      id="defs1">
+    <linearGradient
+       id="linearGradient10"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#d068a8;stop-opacity:1;"
+         offset="0"
+         id="stop10" />
+      <stop
+         style="stop-color:#5f5cb2;stop-opacity:1;"
+         offset="1"
+         id="stop11" />
+    </linearGradient>
     <linearGradient
        id="linearGradient7"
        inkscape:collect="always">
@@ -82,10 +94,10 @@
          id="stop3" />
     </linearGradient>
     <rect
-       x="83.012417"
+       x="83.012421"
        y="107.65673"
-       width="485.10381"
-       height="882.00694"
+       width="485.10382"
+       height="882.00696"
        id="rect2" />
     <rect
        x="232.07307"
@@ -97,52 +109,61 @@
        inkscape:collect="always"
        xlink:href="#linearGradient2"
        id="linearGradient3"
-       x1="442.54206"
-       y1="442.562"
+       x1="442.54205"
+       y1="442.56201"
        x2="473.94476"
-       y2="442.562"
+       y2="442.56201"
        gradientUnits="userSpaceOnUse" />
     <linearGradient
        inkscape:collect="always"
        xlink:href="#linearGradient1"
        id="linearGradient6"
-       x1="159.0577"
+       x1="159.05769"
        y1="253.4697"
-       x2="493.56453"
+       x2="493.56454"
        y2="253.4697"
        gradientUnits="userSpaceOnUse" />
     <linearGradient
        inkscape:collect="always"
        xlink:href="#linearGradient7"
        id="linearGradient8"
-       x1="442.54206"
-       y1="442.562"
+       x1="442.54205"
+       y1="442.56201"
        x2="473.94476"
-       y2="442.562"
+       y2="442.56201"
+       gradientUnits="userSpaceOnUse" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient10"
+       id="linearGradient11"
+       x1="445.43152"
+       y1="449.03203"
+       x2="471.48254"
+       y2="449.03203"
        gradientUnits="userSpaceOnUse" />
   </defs>
   <g
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1"
-     transform="translate(40.838758,-86.138892)">
+     transform="translate(40.838758,-86.138893)">
     <text
        xml:space="preserve"
-       transform="matrix(3.5200502,1.275446,-1.275446,3.5200502,-874.19897,-1946.9839)"
+       transform="matrix(6.3218361,-0.35301079,0.79563519,2.804899,-2980.1042,-905.5578)"
        id="text1"
-       style="font-size:64px;line-height:6.6;font-family:KanjiStrokeOrders;-inkscape-font-specification:KanjiStrokeOrders;text-align:center;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect1);fill:none;fill-rule:evenodd;stroke:url(#linearGradient3);stroke-width:6.05858;stroke-linecap:round;stroke-linejoin:bevel"><tspan
-         x="444.80341"
+       style="font-size:64px;line-height:6.6;font-family:KanjiStrokeOrders;-inkscape-font-specification:KanjiStrokeOrders;text-align:center;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect1);display:inline;fill:url(#linearGradient11);fill-rule:evenodd;stroke:none;stroke-width:2.45727;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none"><tspan
+         x="444.62891"
          y="465.28203"
-         id="tspan2"><tspan
-           style="font-family:'Noto Fangsong KSS Rotated';-inkscape-font-specification:'Noto Fangsong KSS Rotated'"
+         id="tspan4"><tspan
+           style="font-family:Naqsh;-inkscape-font-specification:Naqsh"
            id="tspan1">?</tspan></tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.39356708,0,0,0.39356708,-79.152578,89.547112)"
        id="text2"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:42.6667px;line-height:6.6;font-family:'Noto Fangsong KSS Rotated';-inkscape-font-specification:'Noto Fangsong KSS Rotated';text-align:center;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect2);fill:url(#linearGradient6);fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:6.05858;stroke-linecap:round;stroke-linejoin:bevel"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:42.6667px;line-height:6.6;font-family:'Noto Fangsong KSS Rotated';-inkscape-font-specification:'Noto Fangsong KSS Rotated';text-align:center;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect2);display:inline;fill:url(#linearGradient6);fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:6.05858;stroke-linecap:round;stroke-linejoin:bevel"><tspan
          x="154.91902"
          y="264.6697"
-         id="tspan3">Page not found...</tspan></text>
+         id="tspan5">Page not found...</tspan></text>
   </g>
 </svg>

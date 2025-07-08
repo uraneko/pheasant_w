@@ -8,32 +8,27 @@ pub struct Request {
     method: HttpMethod,
     proto: Protocol,
     uri: String,
-    // params: Option<RequestParams<'a>>,
     params: Option<RequestParams>,
-    body: Option<String>,
+    body: Option<RequestBody>,
     headers: RequestHeaders,
 }
 
 impl Request {
     // parses a new request instance from the request data string
     pub fn parse(req: String) -> Result<Self, ServerError> {
-        let has_body = req.contains("\r\n\r\n");
-        let (req_line_and_headers, body) = {
-            if has_body {
-                let mut s = req.splitn(2, "\r\n\r\n");
+        if req.is_empty() {
+            return Err(ServerError::RequestIsEmpty);
+        }
 
-                (s.next().unwrap(), s.next().map(|s| s.to_string()))
-            } else {
-                (req.as_ref(), None)
-            }
-        };
-        let mut lines = req_line_and_headers.lines();
+        let (hdrs, body) = parse_headers_body(req)?;
+
+        let mut lines = hdrs.lines();
 
         let request_line = lines.next();
-        let (method, uri, params, proto) = Self::parse_request_line(request_line)?;
-        let headers = RequestHeaders::from_iter(lines);
-
-        // let body = body.map(|b| parse_body(b))
+        let (method, uri, params, proto) = parse_request_line(request_line)?;
+        let headers = RequestHeaders {
+            headers: map_iter(':', lines),
+        };
 
         Ok(Self {
             method,
@@ -43,38 +38,6 @@ impl Request {
             params,
             headers,
         })
-    }
-
-    fn parse_request_line(
-        l: Option<&str>,
-    ) -> Result<(HttpMethod, String, Option<RequestParams>, Protocol), ServerError> {
-        let l = l.ok_or(ServerError::RequestLineNotFound)?;
-
-        let mut iter = l.split(' ');
-
-        let method = iter.next().ok_or(ServerError::BadRequestLine)?.try_into()?;
-
-        let uri = iter.next().ok_or(ServerError::BadRequestLine)?;
-        let (uri, params) = Self::parse_uri_and_params(uri)?;
-
-        let proto = iter.next().ok_or(ServerError::BadRequestLine)?.try_into()?;
-
-        Ok((method, uri, params, proto))
-    }
-
-    fn parse_uri_and_params(uri: &str) -> Result<(String, Option<RequestParams>), ServerError> {
-        let mut iter = uri.splitn(2, '?');
-
-        let uri = iter
-            .next()
-            .map(|s| s.to_string())
-            .unwrap_or(String::from("/"));
-        let params = iter.next().map(|s| s.into());
-        if uri.is_empty() {
-            return Err(ServerError::BadRequestLine);
-        }
-
-        Ok((uri, params))
     }
 
     pub fn method(&self) -> HttpMethod {
@@ -98,6 +61,58 @@ impl Request {
     }
 }
 
+// NOTE still not sure if this can error
+fn parse_headers_body(req: String) -> Result<(String, Option<RequestBody>), ServerError> {
+    let has_body = !req.ends_with("\r\n\r\n");
+
+    if has_body {
+        let mut s = req.splitn(2, "\r\n\r\n");
+
+        Ok((
+            s.next().map(|s| s.to_string()).unwrap(),
+            s.next().map(|b| RequestBody {
+                body: map_str('&', '=', b),
+            }),
+        ))
+    } else {
+        Ok((req, None))
+    }
+}
+
+fn parse_uri_and_params(uri: &str) -> Result<(String, Option<RequestParams>), ServerError> {
+    let mut iter = uri.splitn(2, '?');
+
+    let uri = iter
+        .next()
+        .map(|s| s.to_string())
+        .unwrap_or(String::from("/"));
+    let params = iter.next().map(|s| RequestParams {
+        params: map_str('&', '=', s),
+    });
+    if uri.is_empty() {
+        return Err(ServerError::BadRequestLine);
+    }
+
+    Ok((uri, params))
+}
+
+fn parse_request_line(
+    l: Option<&str>,
+) -> Result<(HttpMethod, String, Option<RequestParams>, Protocol), ServerError> {
+    let l = l.ok_or(ServerError::RequestLineNotFound)?;
+
+    let mut iter = l.split(' ');
+
+    let method = iter.next().ok_or(ServerError::BadRequestLine)?.try_into()?;
+
+    let uri = iter.next().ok_or(ServerError::BadRequestLine)?;
+    let (uri, params) = parse_uri_and_params(uri)?;
+
+    let proto = iter.next().ok_or(ServerError::BadRequestLine)?.try_into()?;
+
+    Ok((method, uri, params, proto))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RequestParams {
     params: HashMap<String, String>,
@@ -113,49 +128,14 @@ impl RequestParams {
     }
 }
 
-impl<'a> From<&'a str> for RequestParams {
-    fn from(p: &'a str) -> Self {
-        Self {
-            params: p
-                .split('&')
-                .map(|kv| kv.splitn(2, '='))
-                .map(|mut i| (i.next(), i.next()))
-                .filter(|(a, b)| a.is_some() && b.is_some())
-                .map(|(a, b)| {
-                    (
-                        a.map(|s| s.to_string()).unwrap(),
-                        b.map(|s| s.to_string()).unwrap(),
-                    )
-                })
-                .collect(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RequestHeaders {
     headers: HashMap<String, String>,
 }
 
-impl<'a> RequestHeaders {
-    fn from_iter<T>(iter: T) -> Self
-    where
-        T: Iterator<Item = &'a str>,
-    {
-        Self {
-            headers: iter
-                .map(|kv| kv.splitn(2, ':'))
-                .map(|mut i| (i.next(), i.next()))
-                .filter(|(a, b)| a.is_some() && b.is_some())
-                .map(|(a, b)| {
-                    (
-                        a.map(|s| s.to_string()).unwrap(),
-                        b.map(|s| s.to_string()).unwrap(),
-                    )
-                })
-                .collect(),
-        }
-    }
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RequestBody {
+    body: HashMap<String, String>,
 }
 
 #[non_exhaustive]
@@ -175,4 +155,33 @@ impl TryFrom<&str> for Protocol {
             _ => Err(Self::Error::BadHttpVersion),
         }
     }
+}
+
+fn map_iter<'a, T: Iterator<Item = &'a str>>(key_sep: char, iter: T) -> HashMap<String, String> {
+    iter.map(|p| p.splitn(2, key_sep))
+        .map(|mut i| (i.next(), i.next()))
+        // this gets rid of all faulty pairs
+        .filter(|(a, b)| a.is_some() && b.is_some())
+        .map(|(a, b)| {
+            (
+                a.map(|s| s.to_string()).unwrap(),
+                b.map(|s| s.to_string()).unwrap(),
+            )
+        })
+        .collect()
+}
+
+fn map_str(key_sep: char, pair_sep: char, map: &str) -> HashMap<String, String> {
+    map.split(pair_sep)
+        .map(|kv| kv.splitn(2, key_sep))
+        .map(|mut i| (i.next(), i.next()))
+        // this gets rid of all faulty pairs
+        .filter(|(a, b)| a.is_some() && b.is_some())
+        .map(|(a, b)| {
+            (
+                a.map(|s| s.to_string()).unwrap(),
+                b.map(|s| s.to_string()).unwrap(),
+            )
+        })
+        .collect()
 }
