@@ -15,7 +15,7 @@ pub struct Request {
 
 impl Request {
     // parses a new request instance from the request data string
-    pub fn parse(req: String) -> Result<Self, ServerError> {
+    pub fn parse_from(req: String) -> Result<Self, ServerError> {
         if req.is_empty() {
             return Err(ServerError::RequestIsEmpty);
         }

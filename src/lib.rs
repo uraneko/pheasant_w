@@ -14,7 +14,7 @@ use std::thread::{self, JoinHandle, scope, spawn};
 pub mod requests;
 pub mod server;
 
-pub use requests::RequestParams;
+pub use requests::{Request, RequestParams};
 pub use server::{Server, Service};
 
 #[derive(Debug)]

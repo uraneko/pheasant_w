@@ -101,14 +101,17 @@ impl<'a> Server<'a> {
 
     pub fn serve(&'a self) {
         for stream in self.socket.incoming().flatten() {
-            self.handle_stream(stream);
+            if let Err(e) = self.handle_stream(stream) {
+                // TODO log the error or something
+                println!("{:?}", e);
+            }
         }
     }
 
     fn handle_stream(&'a self, mut stream: TcpStream) -> Result<(), ServerError> {
         let data = read_stream(&mut stream)?;
         println!("{{\n{}\n}}", data);
-        let mut req = Request::parse(data)?;
+        let mut req = Request::parse_from(data)?;
         println!("{:#?}", req);
 
         // println!("method: {:?}, uri: {}", req.method(), req.uri());
