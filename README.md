@@ -2,12 +2,13 @@
 pheasant is a http web server framework written in rust
 
 ## ToC
-- [Features](#Features)
+- [Goals](#Features)
 
-### Features
+### Goals
 - http1.1 server 
 - http2 server 
 - worker pool / multithreaded
 - async operations
 - GET POST PUT PATCH DELETE methods
 - tls / ssl HTTPS
+- middleware

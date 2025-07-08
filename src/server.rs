@@ -2,41 +2,51 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
 use std::str::FromStr;
 
-use super::{HttpMethod, ServerError, requests::Request};
+use serde::Serialize;
+
+use super::{HttpMethod, RequestParams, ServerError, requests::Request};
 
 // const DEF_ADDR_PORT: &str = "127.0.0.1:8883";
 
-fn service<'a, I, O, T>(f: T) -> Box<dyn Fn(String) -> Vec<u8> + 'a>
-where
-    T: Fn(I) -> O + 'static,
-    I: FromStr,
-    <I as FromStr>::Err: std::fmt::Debug,
-    O: Into<Vec<u8>>,
-{
-    Box::new(move |i: String| -> Vec<u8> { f(i.parse::<I>().unwrap()).into() })
-}
-
 pub struct Service<'a> {
     method: HttpMethod,
-    uri: &'a str,
-    callback: Box<dyn Fn(String) -> Vec<u8> + 'a>,
+    uri: String,
+    mime: String,
+    callback: Box<dyn Fn(Option<RequestParams>) -> Vec<u8> + 'a>,
 }
 
 unsafe impl Send for Service<'_> {}
 unsafe impl Sync for Service<'_> {}
 
 impl<'a> Service<'a> {
-    pub fn new<F, I, O>(method: HttpMethod, uri: &'a str, callback: F) -> Self
+    pub fn new<F, O, P>(method: HttpMethod, uri: &str, mime: &str, f: F) -> Self
     where
-        F: Fn(I) -> O + 'static,
-        I: FromStr,
-        <I as FromStr>::Err: std::fmt::Debug,
-        O: Into<Vec<u8>>,
+        F: Fn(P) -> O + 'a,
+        P: From<RequestParams>,
+        O: Serialize,
     {
         Self {
             method,
-            uri,
-            callback: service(callback),
+            uri: uri.into(),
+            mime: mime.into(),
+            callback: Box::new(move |p: Option<RequestParams>| -> Vec<u8> {
+                let p = match p {
+                    Some(p) => p,
+                    None => RequestParams::default(),
+                };
+
+                let res = f(p.into());
+                serde_json::to_string(&res)
+                    .map(|mut res| {
+                        res.remove(0);
+                        res.pop();
+                        res = res.replacen("\\\"", "\"", res.len());
+                        res = res.replacen("\\n", "", res.len());
+
+                        res.into()
+                    })
+                    .unwrap()
+            }),
         }
     }
 }
@@ -57,7 +67,15 @@ impl<'a> Server<'a> {
     /// ```
     pub fn new(addr: impl Into<Ipv4Addr>, port: u16, max: usize) -> Result<Self, ServerError> {
         Ok(Self {
-            socket: TcpListener::bind((addr.into(), port))?,
+            socket: {
+                let addr = addr.into();
+                println!(
+                    "\x1b[1;38;2;213;183;214mServer bound at http://{}:{}\x1b[0m",
+                    addr, port
+                );
+
+                TcpListener::bind((addr, port))?
+            },
             services: vec![],
         })
     }
@@ -72,40 +90,45 @@ impl<'a> Server<'a> {
     fn match_service(&self, method: HttpMethod, uri: &str) -> Option<&Service> {
         self.services
             .iter()
-            .find(|s| s.method == method && s.uri == uri)
+            .find(move |s| s.method == method && s.uri == uri)
     }
 
-    pub fn serve(&self) {
+    pub fn serve(&'a self) {
         for stream in self.socket.incoming().flatten() {
             self.handle_stream(stream);
         }
     }
 
-    fn handle_stream(&self, mut stream: TcpStream) {
+    fn handle_stream(&'a self, mut stream: TcpStream) {
         let data = read_stream(&mut stream);
-        let req = Request::parse(&data).unwrap();
+        println!("{{\n{}\n}}", data);
+        let mut req = Request::parse(data).unwrap();
         println!("{:#?}", req);
+        // if req.uri() == "/favicon.ico" {
+        //     return;
+        // }
 
+        // println!("method: {:?}, uri: {}", req.method(), req.uri());
         let service = self.match_service(req.method(), req.uri()).unwrap();
-        let param = req.params().unwrap().get("who").unwrap().to_string();
+        let param = req.take_params();
         let payload = (service.callback)(param);
-        let response = format_response(payload, "text/html; charset=utf-8");
-        println!("{}", String::from_utf8_lossy(&response));
+        let response = format_response(payload, &service.mime);
+        // println!("{}", String::from_utf8_lossy(&response));
 
         stream.write_all(&response).unwrap();
-        println!("wrote to client; {:?}", stream.take_error());
+        // println!("wrote to client; {:?}", stream.take_error());
 
         stream.flush().unwrap();
-        println!("flushed buffer; {:?}", stream.take_error());
+        // println!("flushed buffer; {:?}", stream.take_error());
     }
 }
 
+// BUG this will not read request body if any
 fn read_stream(s: &mut TcpStream) -> String {
     let mut buf = Vec::new();
     let mut reader = BufReader::new(s);
     while buf.len() < 4 || buf[buf.len() - 4..] != [13, 10, 13, 10] {
         reader.read_until(10, &mut buf).unwrap();
-        println!("{:?}", buf);
     }
 
     String::from_utf8(buf).unwrap()
@@ -122,4 +145,10 @@ fn format_response(payload: Vec<u8>, ct: &str) -> Vec<u8> {
     res.extend([13, 10]);
 
     res
+}
+
+impl From<RequestParams> for () {
+    fn from(_p: RequestParams) -> () {
+        ()
+    }
 }

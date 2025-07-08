@@ -1,37 +1,53 @@
 use std::collections::HashMap;
-use std::str::FromStr;
+use std::io::{BufRead, BufReader, Read};
 
 use super::{HttpMethod, ServerError};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Request<'a> {
+pub struct Request {
     method: HttpMethod,
     proto: Protocol,
-    uri: &'a str,
-    params: Option<RequestParams<'a>>,
-    headers: RequestHeaders<'a>,
+    uri: String,
+    // params: Option<RequestParams<'a>>,
+    params: Option<RequestParams>,
+    body: Option<String>,
+    headers: RequestHeaders,
 }
 
-impl<'a> Request<'a> {
+impl Request {
     // parses a new request instance from the request data string
-    pub fn parse(req: &'a str) -> Result<Self, ServerError> {
-        let mut lines = req.lines();
+    pub fn parse(req: String) -> Result<Self, ServerError> {
+        let has_body = req.contains("\r\n\r\n");
+        let (req_line_and_headers, body) = {
+            if has_body {
+                let mut s = req.splitn(2, "\r\n\r\n");
+
+                (s.next().unwrap(), s.next().map(|s| s.to_string()))
+            } else {
+                (req.as_ref(), None)
+            }
+        };
+        let mut lines = req_line_and_headers.lines();
+
         let request_line = lines.next();
         let (method, uri, params, proto) = Self::parse_request_line(request_line)?;
         let headers = RequestHeaders::from_iter(lines);
+
+        // let body = body.map(|b| parse_body(b))
 
         Ok(Self {
             method,
             proto,
             uri,
+            body,
             params,
             headers,
         })
     }
 
     fn parse_request_line(
-        l: Option<&'a str>,
-    ) -> Result<(HttpMethod, &'a str, Option<RequestParams<'a>>, Protocol), ServerError> {
+        l: Option<&str>,
+    ) -> Result<(HttpMethod, String, Option<RequestParams>, Protocol), ServerError> {
         let l = l.ok_or(ServerError::RequestLineNotFound)?;
 
         let mut iter = l.split(' ');
@@ -46,12 +62,13 @@ impl<'a> Request<'a> {
         Ok((method, uri, params, proto))
     }
 
-    fn parse_uri_and_params(
-        uri: &'a str,
-    ) -> Result<(&'a str, Option<RequestParams<'a>>), ServerError> {
+    fn parse_uri_and_params(uri: &str) -> Result<(String, Option<RequestParams>), ServerError> {
         let mut iter = uri.splitn(2, '?');
 
-        let uri = iter.next().unwrap_or_default();
+        let uri = iter
+            .next()
+            .map(|s| s.to_string())
+            .unwrap_or(String::from("/"));
         let params = iter.next().map(|s| s.into());
         if uri.is_empty() {
             return Err(ServerError::BadRequestLine);
@@ -64,31 +81,39 @@ impl<'a> Request<'a> {
         self.method
     }
 
-    pub fn uri(&self) -> &'a str {
-        self.uri
+    pub fn uri(&self) -> &str {
+        &self.uri
     }
 
-    pub fn params(&self) -> Option<RequestParams<'a>> {
-        self.params.clone()
+    pub fn params_ref(&self) -> Option<&RequestParams> {
+        self.params.as_ref()
     }
 
-    fn headers(&self) -> RequestHeaders<'a> {
-        self.headers.clone()
+    pub fn take_params(&mut self) -> Option<RequestParams> {
+        std::mem::take(&mut self.params)
     }
-}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RequestParams<'a> {
-    params: HashMap<&'a str, &'a str>,
-}
-
-impl<'a> RequestParams<'a> {
-    pub fn get(&self, key: &str) -> Option<&&str> {
-        self.params.get(key)
+    fn headers(&self) -> &RequestHeaders {
+        &self.headers
     }
 }
 
-impl<'a> From<&'a str> for RequestParams<'a> {
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RequestParams {
+    params: HashMap<String, String>,
+}
+
+impl RequestParams {
+    pub fn get_ref(&self, key: &str) -> Option<&str> {
+        self.params.get(key).map(|s| s.as_ref())
+    }
+
+    pub fn remove(&mut self, key: &str) -> Option<String> {
+        self.params.remove(key)
+    }
+}
+
+impl<'a> From<&'a str> for RequestParams {
     fn from(p: &'a str) -> Self {
         Self {
             params: p
@@ -96,18 +121,23 @@ impl<'a> From<&'a str> for RequestParams<'a> {
                 .map(|kv| kv.splitn(2, '='))
                 .map(|mut i| (i.next(), i.next()))
                 .filter(|(a, b)| a.is_some() && b.is_some())
-                .map(|(a, b)| (a.unwrap(), b.unwrap()))
+                .map(|(a, b)| {
+                    (
+                        a.map(|s| s.to_string()).unwrap(),
+                        b.map(|s| s.to_string()).unwrap(),
+                    )
+                })
                 .collect(),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RequestHeaders<'a> {
-    headers: HashMap<&'a str, &'a str>,
+pub struct RequestHeaders {
+    headers: HashMap<String, String>,
 }
 
-impl<'a> RequestHeaders<'a> {
+impl<'a> RequestHeaders {
     fn from_iter<T>(iter: T) -> Self
     where
         T: Iterator<Item = &'a str>,
@@ -117,7 +147,12 @@ impl<'a> RequestHeaders<'a> {
                 .map(|kv| kv.splitn(2, ':'))
                 .map(|mut i| (i.next(), i.next()))
                 .filter(|(a, b)| a.is_some() && b.is_some())
-                .map(|(a, b)| (a.unwrap(), b.unwrap()))
+                .map(|(a, b)| {
+                    (
+                        a.map(|s| s.to_string()).unwrap(),
+                        b.map(|s| s.to_string()).unwrap(),
+                    )
+                })
                 .collect(),
         }
     }
