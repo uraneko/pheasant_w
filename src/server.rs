@@ -99,17 +99,17 @@ impl<'a> Server<'a> {
             .find(move |s| s.method == method && s.uri == uri)
     }
 
-    pub fn serve(&'a self) {
+    pub async fn serve(&'a self) {
         for stream in self.socket.incoming().flatten() {
-            if let Err(e) = self.handle_stream(stream) {
+            if let Err(e) = self.handle_stream(stream).await {
                 // TODO log the error or something
                 println!("{:?}", e);
             }
         }
     }
 
-    fn handle_stream(&'a self, mut stream: TcpStream) -> Result<(), ServerError> {
-        let data = read_stream(&mut stream)?;
+    async fn handle_stream(&'a self, mut stream: TcpStream) -> Result<(), ServerError> {
+        let data = read_stream(&mut stream).await?;
         println!("{{\n{}\n}}", data);
         let mut req = Request::parse_from(data)?;
         println!("{:#?}", req);
@@ -133,7 +133,7 @@ impl<'a> Server<'a> {
 }
 
 // BUG this will not read request body if any
-fn read_stream(s: &mut TcpStream) -> Result<String, ServerError> {
+async fn read_stream(s: &mut TcpStream) -> Result<String, ServerError> {
     let mut data = Vec::new();
     let mut reader = BufReader::new(s);
     let mut buf = [0; 1024];

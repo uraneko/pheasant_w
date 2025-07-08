@@ -71,7 +71,7 @@ fn parse_headers_body(req: String) -> Result<(String, Option<RequestBody>), Serv
         Ok((
             s.next().map(|s| s.to_string()).unwrap(),
             s.next().map(|b| RequestBody {
-                body: map_str('&', '=', b),
+                body: map_str('=', '&', b),
             }),
         ))
     } else {
@@ -87,7 +87,7 @@ fn parse_uri_and_params(uri: &str) -> Result<(String, Option<RequestParams>), Se
         .map(|s| s.to_string())
         .unwrap_or(String::from("/"));
     let params = iter.next().map(|s| RequestParams {
-        params: map_str('&', '=', s),
+        params: map_str('=', '&', s),
     });
     if uri.is_empty() {
         return Err(ServerError::BadRequestLine);

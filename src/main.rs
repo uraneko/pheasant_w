@@ -11,7 +11,7 @@ async fn main() {
         favicon,
     ));
     phe.service(Service::new(HttpMethod::Get, "/icon", "image/svg+xml", svg));
-    phe.serve();
+    phe.serve().await;
 }
 
 struct Who {
