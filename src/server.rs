@@ -178,12 +178,9 @@ impl From<RequestParams> for () {
     }
 }
 
+const NOT_FOUND_SVG: &str = include_str!("../assets/404.svg");
+const NOT_FOUND_HTML: &str = include_str!("../templates/404.html");
+
 fn not_found404(_: ()) -> String {
-    let svg = std::fs::read_to_string("assets/404.svg").unwrap();
-    format!(
-        "{}",
-        std::fs::read_to_string("templates/404.html")
-            .unwrap()
-            .replace("{404.svg}", &svg)
-    )
+    NOT_FOUND_HTML.replace("{404.svg}", NOT_FOUND_SVG)
 }
