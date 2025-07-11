@@ -5,7 +5,7 @@ use std::string::FromUtf8Error;
 
 use serde::Serialize;
 
-use super::{HttpMethod, Request, RequestBody, RequestParams, ServerError};
+use super::{HttpMethod, PheasantError, Request, RequestBody, RequestParams};
 
 pub fn into_bytes<S: Serialize>(s: S) -> Vec<u8> {
     if let Ok(mut res) = serde_json::to_string(&s) {
@@ -76,7 +76,7 @@ impl Server {
     /// let max = 90000;
     /// let server = Server::new(max, addr, port)
     /// ```
-    pub fn new(addr: impl Into<Ipv4Addr>, port: u16, max: usize) -> Result<Self, ServerError> {
+    pub fn new(addr: impl Into<Ipv4Addr>, port: u16, max: usize) -> Result<Self, PheasantError> {
         Ok(Self {
             socket: {
                 let addr = addr.into();
@@ -109,7 +109,7 @@ impl Server {
             .find(move |s| s.method == method && s.uri == uri)
     }
 
-    pub async fn serve(&self) {
+    pub async fn serve(&mut self) {
         for stream in self.socket.incoming().flatten() {
             if let Err(e) = self.handle_stream(stream).await {
                 // TODO log the error or something
@@ -118,10 +118,10 @@ impl Server {
         }
     }
 
-    async fn handle_stream(&self, mut stream: TcpStream) -> Result<(), ServerError> {
+    async fn handle_stream(&self, mut stream: TcpStream) -> Result<TcpStream, PheasantError> {
         let data = read_stream(&mut stream).await?;
         println!("{{\n{}\n}}", data);
-        let mut req = Request::parse_from(data)?;
+        let req = Request::parse_from(data)?;
         println!("{:#?}", req);
 
         // println!("method: {:?}, uri: {}", req.method(), req.uri());
@@ -138,23 +138,23 @@ impl Server {
         stream.flush()?;
         // println!("flushed buffer; {:?}", stream.take_error());
 
-        Ok(())
+        Ok(stream)
     }
 }
 
 // BUG this will not read request body if any
-async fn read_stream(s: &mut TcpStream) -> Result<String, ServerError> {
+async fn read_stream(s: &mut TcpStream) -> Result<String, PheasantError> {
     let mut data = Vec::new();
     let mut reader = BufReader::new(s);
     let mut buf = [0; 1024];
     loop {
         let Ok(n) = reader.read(&mut buf) else {
-            return Err(ServerError::StreamReadCrached);
+            return Err(PheasantError::StreamReadCrached);
         };
         if n < 1024 {
             break data.extend(&buf[..n]);
         } else if n > 1024 {
-            return Err(ServerError::StreamReadWithExcess);
+            return Err(PheasantError::StreamReadWithExcess);
         }
         data.extend(buf);
     }
@@ -162,7 +162,7 @@ async fn read_stream(s: &mut TcpStream) -> Result<String, ServerError> {
     String::from_utf8(data).map_err(|e| e.into())
 }
 
-impl From<FromUtf8Error> for ServerError {
+impl From<FromUtf8Error> for PheasantError {
     fn from(_err: FromUtf8Error) -> Self {
         Self::BytesParsingFailed
     }

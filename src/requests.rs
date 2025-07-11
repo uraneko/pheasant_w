@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
 
-use super::{HttpMethod, ServerError};
+use super::{HttpMethod, PheasantError};
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct Request {
@@ -15,9 +15,9 @@ pub struct Request {
 
 impl Request {
     // parses a new request instance from the request data string
-    pub fn parse_from(req: String) -> Result<Self, ServerError> {
+    pub fn parse_from(req: String) -> Result<Self, PheasantError> {
         if req.is_empty() {
-            return Err(ServerError::RequestIsEmpty);
+            return Err(PheasantError::RequestIsEmpty);
         }
 
         let (hdrs, body) = parse_headers_body(req)?;
@@ -62,7 +62,7 @@ impl Request {
 }
 
 // NOTE still not sure if this can error
-fn parse_headers_body(req: String) -> Result<(String, Option<RequestBody>), ServerError> {
+fn parse_headers_body(req: String) -> Result<(String, Option<RequestBody>), PheasantError> {
     let has_body = !req.ends_with("\r\n\r\n");
 
     if has_body {
@@ -79,7 +79,7 @@ fn parse_headers_body(req: String) -> Result<(String, Option<RequestBody>), Serv
     }
 }
 
-fn parse_uri_and_params(uri: &str) -> Result<(String, Option<RequestParams>), ServerError> {
+fn parse_uri_and_params(uri: &str) -> Result<(String, Option<RequestParams>), PheasantError> {
     let mut iter = uri.splitn(2, '?');
 
     let uri = iter
@@ -90,7 +90,7 @@ fn parse_uri_and_params(uri: &str) -> Result<(String, Option<RequestParams>), Se
         params: map_str('=', '&', s),
     });
     if uri.is_empty() {
-        return Err(ServerError::BadRequestLine);
+        return Err(PheasantError::BadRequestLine);
     }
 
     Ok((uri, params))
@@ -98,17 +98,23 @@ fn parse_uri_and_params(uri: &str) -> Result<(String, Option<RequestParams>), Se
 
 fn parse_request_line(
     l: Option<&str>,
-) -> Result<(HttpMethod, String, Option<RequestParams>, Protocol), ServerError> {
-    let l = l.ok_or(ServerError::RequestLineNotFound)?;
+) -> Result<(HttpMethod, String, Option<RequestParams>, Protocol), PheasantError> {
+    let l = l.ok_or(PheasantError::RequestLineNotFound)?;
 
     let mut iter = l.split(' ');
 
-    let method = iter.next().ok_or(ServerError::BadRequestLine)?.try_into()?;
+    let method = iter
+        .next()
+        .ok_or(PheasantError::BadRequestLine)?
+        .try_into()?;
 
-    let uri = iter.next().ok_or(ServerError::BadRequestLine)?;
+    let uri = iter.next().ok_or(PheasantError::BadRequestLine)?;
     let (uri, params) = parse_uri_and_params(uri)?;
 
-    let proto = iter.next().ok_or(ServerError::BadRequestLine)?.try_into()?;
+    let proto = iter
+        .next()
+        .ok_or(PheasantError::BadRequestLine)?
+        .try_into()?;
 
     Ok((method, uri, params, proto))
 }
@@ -147,7 +153,7 @@ pub enum Protocol {
 }
 
 impl TryFrom<&str> for Protocol {
-    type Error = ServerError;
+    type Error = PheasantError;
 
     fn try_from(v: &str) -> Result<Self, Self::Error> {
         match v {

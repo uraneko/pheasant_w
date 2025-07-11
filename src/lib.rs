@@ -18,7 +18,7 @@ pub use requests::{Request, RequestBody, RequestParams};
 pub use server::{Server, Service};
 
 #[derive(Debug)]
-pub enum ServerError {
+pub enum PheasantError {
     StreamReadCrached,
     StreamReadWithExcess,
     BytesParsingFailed,
@@ -34,15 +34,15 @@ pub enum ServerError {
     IO(std::io::Error),
 }
 
-impl std::fmt::Display for ServerError {
+impl std::fmt::Display for PheasantError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:#?}", self)
     }
 }
 
-impl std::error::Error for ServerError {}
+impl std::error::Error for PheasantError {}
 
-impl From<std::io::Error> for ServerError {
+impl From<std::io::Error> for PheasantError {
     fn from(err: std::io::Error) -> Self {
         Self::IO(err)
     }
@@ -63,7 +63,7 @@ pub enum HttpMethod {
 }
 
 impl TryFrom<&str> for HttpMethod {
-    type Error = ServerError;
+    type Error = PheasantError;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
