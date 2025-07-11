@@ -1,4 +1,4 @@
-use pheasant::{HttpMethod, RequestParams, Server, Service};
+use pheasant_core::{HttpMethod, Request, Server, Service};
 
 #[tokio::main]
 async fn main() {
@@ -18,26 +18,25 @@ struct Who {
     who: String,
 }
 
-impl From<RequestParams> for Who {
-    fn from(mut p: RequestParams) -> Self {
+impl From<Request> for Who {
+    fn from(mut req: Request) -> Self {
         Self {
-            who: p.remove("who").unwrap(),
+            who: req.take_params().unwrap().remove("who").unwrap(),
         }
     }
 }
 
-fn hello(p: RequestParams) -> String {
-    let who: Who = p.into();
-
-    format!("<h1>hello {}</h1>", who.who)
+async fn hello(who: Who) -> Vec<u8> {
+    format!("<h1>hello {}</h1>", who.who).into_bytes()
 }
 
-fn favicon(_: ()) -> String {
-    std::fs::read_to_string("assets/404.svg").unwrap()
+async fn favicon(_: ()) -> Vec<u8> {
+    std::fs::read_to_string("assets/404.svg")
+        .unwrap()
+        .into_bytes()
 }
 
-fn svg(p: RequestParams) -> String {
-    let who: Who = p.into();
-
-    std::fs::read_to_string(who.who).unwrap()
+// #[get("/icon")]
+async fn svg(who: Who) -> Vec<u8> {
+    std::fs::read_to_string(who.who).unwrap().into_bytes()
 }

@@ -169,12 +169,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "pheasant"
+name = "pheasant_core"
 version = "0.1.0"
 dependencies = [
  "crossbeam-channel",
  "serde",
  "serde_json",
+ "tobytes",
  "tokio",
 ]
 
@@ -302,6 +303,12 @@ dependencies = [
  "quote",
  "unicode-ident",
 ]
+
+[[package]]
+name = "tobytes"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31f4304e793809e8857dd93c85ce55b2356a1acc86ef63b12dd9bb2bbfeb4924"
 
 [[package]]
 name = "tokio"

@@ -1,65 +1,75 @@
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
-use std::str::FromStr;
+use std::pin::Pin;
 use std::string::FromUtf8Error;
 
 use serde::Serialize;
 
-use super::{HttpMethod, RequestParams, ServerError, requests::Request};
+use super::{HttpMethod, Request, RequestBody, RequestParams, ServerError};
 
-// const DEF_ADDR_PORT: &str = "127.0.0.1:8883";
+pub fn into_bytes<S: Serialize>(s: S) -> Vec<u8> {
+    if let Ok(mut res) = serde_json::to_string(&s) {
+        res.remove(0);
+        res.pop();
+        res = res.replacen("\\\"", "\"", res.len());
+        res = res.replacen("\\n", "", res.len());
 
-pub struct Service<'a> {
+        return res.into();
+    } else {
+        vec![]
+    }
+}
+
+enum ServiceDivergence {
+    Params(Box<dyn Fn(RequestParams) -> Vec<u8>>),
+    Body(Box<dyn Fn(RequestBody) -> Vec<u8>>),
+    ParamsAndBody(Box<dyn Fn(RequestParams, RequestBody) -> Vec<u8>>),
+    None(Box<dyn Fn(RequestParams) -> Vec<u8>>),
+}
+
+pub struct Service {
     method: HttpMethod,
     uri: String,
     mime: String,
-    callback: Box<dyn Fn(Option<RequestParams>) -> Vec<u8> + 'a>,
+    callback: BoxFun,
 }
 
-unsafe impl Send for Service<'_> {}
-unsafe impl Sync for Service<'_> {}
+unsafe impl Send for Service {}
+unsafe impl Sync for Service {}
+// the future return type
+type BoxFut<'a> = Pin<Box<dyn Future<Output = Vec<u8>> + Send + 'a>>;
 
-impl<'a> Service<'a> {
-    pub fn new<F, O, P>(method: HttpMethod, uri: &str, mime: &str, f: F) -> Self
+// the wrapper function type
+type BoxFun = Box<dyn Fn(Request) -> BoxFut<'static> + Send + Sync>;
+
+impl Service {
+    pub fn new<F, O, R>(method: HttpMethod, uri: &str, mime: &str, call: F) -> Self
     where
-        F: Fn(P) -> O + 'a,
-        P: From<RequestParams>,
-        O: Serialize,
+        F: Fn(R) -> O + Send + Sync + 'static,
+        O: Future<Output = Vec<u8>> + Send + 'static,
+        R: From<Request>,
     {
         Self {
             method,
             uri: uri.into(),
             mime: mime.into(),
-            callback: Box::new(move |p: Option<RequestParams>| -> Vec<u8> {
-                let p = match p {
-                    Some(p) => p,
-                    None => RequestParams::default(),
-                };
+            callback: Box::new(move |req: Request| {
+                let input: R = req.into();
 
-                let res = f(p.into());
-                serde_json::to_string(&res)
-                    .map(|mut res| {
-                        res.remove(0);
-                        res.pop();
-                        res = res.replacen("\\\"", "\"", res.len());
-                        res = res.replacen("\\n", "", res.len());
-
-                        res.into()
-                    })
-                    .unwrap()
+                Box::pin(call(input))
             }),
         }
     }
 }
 
-pub struct Server<'a> {
+pub struct Server {
     /// the server tcp listener socket
     socket: TcpListener,
     /// container for the server services
-    services: Vec<Service<'a>>,
+    services: Vec<Service>,
 }
 
-impl<'a> Server<'a> {
+impl Server {
     /// creates a new server
     /// ```
     /// let (addr, port) = ([127.0.0.1], 8883);
@@ -87,19 +97,19 @@ impl<'a> Server<'a> {
     }
 
     /// pushes a new service to the server
-    pub fn service(&mut self, service: Service<'a>) {
+    pub fn service(&mut self, service: Service) {
         self.services.push(service);
     }
 }
 
-impl<'a> Server<'a> {
+impl Server {
     fn match_service(&self, method: HttpMethod, uri: &str) -> Option<&Service> {
         self.services
             .iter()
             .find(move |s| s.method == method && s.uri == uri)
     }
 
-    pub async fn serve(&'a self) {
+    pub async fn serve(&self) {
         for stream in self.socket.incoming().flatten() {
             if let Err(e) = self.handle_stream(stream).await {
                 // TODO log the error or something
@@ -108,7 +118,7 @@ impl<'a> Server<'a> {
         }
     }
 
-    async fn handle_stream(&'a self, mut stream: TcpStream) -> Result<(), ServerError> {
+    async fn handle_stream(&self, mut stream: TcpStream) -> Result<(), ServerError> {
         let data = read_stream(&mut stream).await?;
         println!("{{\n{}\n}}", data);
         let mut req = Request::parse_from(data)?;
@@ -118,8 +128,8 @@ impl<'a> Server<'a> {
         let service = self
             .match_service(req.method(), req.uri())
             .unwrap_or(&self.services[0]);
-        let param = req.take_params();
-        let payload = (service.callback)(param);
+
+        let payload = (service.callback)(req).await;
         let response = format_response(payload, &service.mime);
         // println!("{}", String::from_utf8_lossy(&response));
 
@@ -172,8 +182,8 @@ fn format_response(payload: Vec<u8>, ct: &str) -> Vec<u8> {
     res
 }
 
-impl From<RequestParams> for () {
-    fn from(_p: RequestParams) -> () {
+impl From<Request> for () {
+    fn from(_p: Request) -> () {
         ()
     }
 }
@@ -181,6 +191,8 @@ impl From<RequestParams> for () {
 const NOT_FOUND_SVG: &str = include_str!("../assets/404.svg");
 const NOT_FOUND_HTML: &str = include_str!("../templates/404.html");
 
-fn not_found404(_: ()) -> String {
-    NOT_FOUND_HTML.replace("{404.svg}", NOT_FOUND_SVG)
+async fn not_found404(_: ()) -> Vec<u8> {
+    NOT_FOUND_HTML
+        .replace("{404.svg}", NOT_FOUND_SVG)
+        .into_bytes()
 }

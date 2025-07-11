@@ -3,7 +3,7 @@ use std::io::{BufRead, BufReader, Read};
 
 use super::{HttpMethod, ServerError};
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct Request {
     method: HttpMethod,
     proto: Protocol,
@@ -139,8 +139,9 @@ pub struct RequestBody {
 }
 
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Protocol {
+    #[default]
     V1_1,
     V2,
 }
