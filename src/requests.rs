@@ -5,6 +5,7 @@ use std::net::TcpStream;
 use url::Url;
 
 use super::{ClientError, Method, PheasantError, ServerError};
+use crate::server::join_path;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Request {
@@ -22,6 +23,7 @@ impl Request {
         // if error we return 400 bad request
         _ = read_req_line(&mut v, &mut reader)?;
         let (method, uri, proto) = parse_req_line(&mut v.drain(..))?;
+        println!("parsed req line");
 
         let headers = read_parse_headers(&mut v, &mut reader)?;
 
@@ -158,13 +160,17 @@ fn parse_req_line(
     {
         val.push(b);
     }
-    let uri = Url::parse(str::from_utf8(&val)?)?;
+    let uri = str::from_utf8(&val)?;
+    let uri = join_path(uri);
     val.clear();
 
-    let proto = bytes.fold(val, |mut acc, b| {
-        acc.push(b);
-        acc
-    });
+    let proto = bytes
+        .filter(|b| *b != 10 && *b != 13)
+        .fold(val, |mut acc, b| {
+            acc.push(b);
+            acc
+        });
+    println!("p -> {:?}", proto);
     let proto = Protocol::try_from(proto.as_slice())?;
 
     Ok((method, uri, proto))
