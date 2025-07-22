@@ -1,16 +1,16 @@
-use pheasant_core::{HttpMethod, Request, Server, Service};
+use pheasant_core::{Method, Request, Server, Service};
 
 #[tokio::main]
 async fn main() {
     let mut phe = Server::new([127, 0, 0, 1], 8883, 3333).unwrap();
-    phe.service(Service::new(HttpMethod::Get, "/hello", "text/html", hello));
+    phe.service(Service::new(Method::Get, "/hello", "text/html", hello));
     phe.service(Service::new(
-        HttpMethod::Get,
+        Method::Get,
         "/favicon.ico",
         "image/svg+xml",
         favicon,
     ));
-    phe.service(Service::new(HttpMethod::Get, "/icon", "image/svg+xml", svg));
+    phe.service(Service::new(Method::Get, "/icon", "image/svg+xml", svg));
     phe.serve().await;
 }
 
@@ -21,7 +21,7 @@ struct Who {
 impl From<Request> for Who {
     fn from(mut req: Request) -> Self {
         Self {
-            who: req.take_params().unwrap().remove("who").unwrap(),
+            who: req.parse_query_param("who").unwrap().into(),
         }
     }
 }

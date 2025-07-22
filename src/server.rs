@@ -1,66 +1,36 @@
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
-use std::pin::Pin;
-use std::string::FromUtf8Error;
 
+use mime::Mime;
 use serde::Serialize;
+use url::Url;
 
-use super::{HttpMethod, PheasantError, Request, RequestBody, RequestParams};
+use super::{Method, PheasantError, Request, Service};
 
-pub fn into_bytes<S: Serialize>(s: S) -> Vec<u8> {
-    if let Ok(mut res) = serde_json::to_string(&s) {
-        res.remove(0);
-        res.pop();
-        res = res.replacen("\\\"", "\"", res.len());
-        res = res.replacen("\\n", "", res.len());
+pub fn base_url() -> Url {
+    Url::parse("http://127.0.0.1:8883").unwrap()
+}
 
-        return res.into();
-    } else {
-        vec![]
+pub fn join_path(path: &str) -> Url {
+    if path.starts_with("http://127.0.0.1:8883") {
+        return Url::parse(path).unwrap();
     }
+
+    base_url().join(path).unwrap()
 }
 
-enum ServiceDivergence {
-    Params(Box<dyn Fn(RequestParams) -> Vec<u8>>),
-    Body(Box<dyn Fn(RequestBody) -> Vec<u8>>),
-    ParamsAndBody(Box<dyn Fn(RequestParams, RequestBody) -> Vec<u8>>),
-    None(Box<dyn Fn(RequestParams) -> Vec<u8>>),
-}
-
-pub struct Service {
-    method: HttpMethod,
-    uri: String,
-    mime: String,
-    callback: BoxFun,
-}
-
-unsafe impl Send for Service {}
-unsafe impl Sync for Service {}
-// the future return type
-type BoxFut<'a> = Pin<Box<dyn Future<Output = Vec<u8>> + Send + 'a>>;
-
-// the wrapper function type
-type BoxFun = Box<dyn Fn(Request) -> BoxFut<'static> + Send + Sync>;
-
-impl Service {
-    pub fn new<F, O, R>(method: HttpMethod, uri: &str, mime: &str, call: F) -> Self
-    where
-        F: Fn(R) -> O + Send + Sync + 'static,
-        O: Future<Output = Vec<u8>> + Send + 'static,
-        R: From<Request>,
-    {
-        Self {
-            method,
-            uri: uri.into(),
-            mime: mime.into(),
-            callback: Box::new(move |req: Request| {
-                let input: R = req.into();
-
-                Box::pin(call(input))
-            }),
-        }
-    }
-}
+// pub fn into_bytes<S: Serialize>(s: S) -> Vec<u8> {
+//     if let Ok(mut res) = serde_json::to_string(&s) {
+//         res.remove(0);
+//         res.pop();
+//         res = res.replacen("\\\"", "\"", res.len());
+//         res = res.replacen("\\n", "", res.len());
+//
+//         return res.into();
+//     } else {
+//         vec![]
+//     }
+// }
 
 pub struct Server {
     /// the server tcp listener socket
@@ -85,10 +55,11 @@ impl Server {
                     addr, port
                 );
 
+                // `impl From<io::Error> for PheasantError` is for this
                 TcpListener::bind((addr, port))?
             },
             services: vec![Service::new(
-                HttpMethod::Get,
+                Method::Get,
                 "/not_found404.html",
                 "text/html",
                 not_found404,
@@ -103,10 +74,10 @@ impl Server {
 }
 
 impl Server {
-    fn match_service(&self, method: HttpMethod, uri: &str) -> Option<&Service> {
+    fn match_service(&self, method: Method, uri: &Url) -> Option<&Service> {
         self.services
             .iter()
-            .find(move |s| s.method == method && s.uri == uri)
+            .find(move |s| s.method() == method && s.uri() == uri)
     }
 
     pub async fn serve(&mut self) {
@@ -119,9 +90,7 @@ impl Server {
     }
 
     async fn handle_stream(&self, mut stream: TcpStream) -> Result<TcpStream, PheasantError> {
-        let data = read_stream(&mut stream).await?;
-        println!("{{\n{}\n}}", data);
-        let req = Request::parse_from(data)?;
+        let req = Request::from_stream(&mut stream)?;
         println!("{:#?}", req);
 
         // println!("method: {:?}, uri: {}", req.method(), req.uri());
@@ -129,8 +98,11 @@ impl Server {
             .match_service(req.method(), req.uri())
             .unwrap_or(&self.services[0]);
 
-        let payload = (service.callback)(req).await;
-        let response = format_response(payload, &service.mime);
+        let payload = (service.service())(req).await;
+        let response = format_response(
+            payload,
+            service.mime().unwrap_or(&mime::APPLICATION_OCTET_STREAM),
+        );
         // println!("{}", String::from_utf8_lossy(&response));
 
         stream.write_all(&response)?;
@@ -142,7 +114,6 @@ impl Server {
     }
 }
 
-// BUG this will not read request body if any
 async fn read_stream(s: &mut TcpStream) -> Result<String, PheasantError> {
     let mut data = Vec::new();
     let mut reader = BufReader::new(s);
@@ -162,14 +133,7 @@ async fn read_stream(s: &mut TcpStream) -> Result<String, PheasantError> {
     String::from_utf8(data).map_err(|e| e.into())
 }
 
-impl From<FromUtf8Error> for PheasantError {
-    fn from(_err: FromUtf8Error) -> Self {
-        Self::BytesParsingFailed
-    }
-}
-
-// TODO response builder
-fn format_response(payload: Vec<u8>, ct: &str) -> Vec<u8> {
+fn format_response(payload: Vec<u8>, ct: &Mime) -> Vec<u8> {
     let cl = payload.len();
     let mut res: Vec<u8> = format!(
         "HTTP/1.1 200 OK\r\nAccept-Range: bytes\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n",

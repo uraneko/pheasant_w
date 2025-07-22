@@ -1,33 +1,39 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
+use std::net::TcpStream;
 
-use super::{HttpMethod, PheasantError};
+use url::Url;
 
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+use super::{ClientError, Method, PheasantError, ServerError};
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Request {
-    method: HttpMethod,
+    method: Method,
     proto: Protocol,
-    uri: String,
-    params: Option<RequestParams>,
-    body: Option<RequestBody>,
-    headers: RequestHeaders,
+    uri: Url,
+    body: Option<String>,
+    headers: HashMap<String, String>,
 }
 
 impl Request {
-    // parses a new request instance from the request data string
-    pub fn parse_from(req: String) -> Result<Self, PheasantError> {
-        if req.is_empty() {
-            return Err(PheasantError::RequestIsEmpty);
-        }
+    pub fn from_stream(stream: &mut TcpStream) -> Result<Self, PheasantError> {
+        let mut v = vec![];
+        let mut reader = BufReader::new(stream);
+        // if error we return 400 bad request
+        _ = read_req_line(&mut v, &mut reader)?;
+        let (method, uri, proto) = parse_req_line(&mut v.drain(..))?;
 
-        let (hdrs, body) = parse_headers_body(req)?;
+        let headers = read_parse_headers(&mut v, &mut reader)?;
 
-        let mut lines = hdrs.lines();
+        let len = headers.header::<usize>("Content-Length");
 
-        let request_line = lines.next();
-        let (method, uri, params, proto) = parse_request_line(request_line)?;
-        let headers = RequestHeaders {
-            headers: map_iter(':', lines),
+        let body = if let Some(len) = len {
+            read_body(&mut v, &mut reader, len)?;
+            let b = String::from_utf8(v)?;
+
+            Some(b)
+        } else {
+            None
         };
 
         Ok(Self {
@@ -35,121 +41,82 @@ impl Request {
             proto,
             uri,
             body,
-            params,
             headers,
         })
     }
 
-    pub fn method(&self) -> HttpMethod {
+    pub fn method(&self) -> Method {
         self.method
     }
 
-    pub fn uri(&self) -> &str {
+    pub fn uri(&self) -> &Url {
         &self.uri
     }
 
-    pub fn params_ref(&self) -> Option<&RequestParams> {
-        self.params.as_ref()
+    pub fn query(&mut self) -> Option<&str> {
+        self.uri.query()
     }
 
-    pub fn take_params(&mut self) -> Option<RequestParams> {
-        std::mem::take(&mut self.params)
+    pub fn contains_query(&self) -> bool {
+        self.uri.query().is_some()
     }
 
-    fn headers(&self) -> &RequestHeaders {
-        &self.headers
-    }
-}
-
-// NOTE still not sure if this can error
-fn parse_headers_body(req: String) -> Result<(String, Option<RequestBody>), PheasantError> {
-    let has_body = !req.ends_with("\r\n\r\n");
-
-    if has_body {
-        let mut s = req.splitn(2, "\r\n\r\n");
-
-        Ok((
-            s.next().map(|s| s.to_string()).unwrap(),
-            s.next().map(|b| RequestBody {
-                body: map_str('=', '&', b),
-            }),
-        ))
-    } else {
-        Ok((req, None))
-    }
-}
-
-fn parse_uri_and_params(uri: &str) -> Result<(String, Option<RequestParams>), PheasantError> {
-    let mut iter = uri.splitn(2, '?');
-
-    let uri = iter
-        .next()
-        .map(|s| s.to_string())
-        .unwrap_or(String::from("/"));
-    let params = iter.next().map(|s| RequestParams {
-        params: map_str('=', '&', s),
-    });
-    if uri.is_empty() {
-        return Err(PheasantError::BadRequestLine);
+    pub fn parse_query(&self) -> HashMap<&str, &str> {
+        self.uri
+            .query()
+            .unwrap()
+            .split('&')
+            .map(|e| -> [&str; 2] { e.splitn(2, '=').collect::<Vec<&str>>().try_into().unwrap() })
+            .map(|s| (s[0], s[1]))
+            .collect()
     }
 
-    Ok((uri, params))
-}
-
-fn parse_request_line(
-    l: Option<&str>,
-) -> Result<(HttpMethod, String, Option<RequestParams>, Protocol), PheasantError> {
-    let l = l.ok_or(PheasantError::RequestLineNotFound)?;
-
-    let mut iter = l.split(' ');
-
-    let method = iter
-        .next()
-        .ok_or(PheasantError::BadRequestLine)?
-        .try_into()?;
-
-    let uri = iter.next().ok_or(PheasantError::BadRequestLine)?;
-    let (uri, params) = parse_uri_and_params(uri)?;
-
-    let proto = iter
-        .next()
-        .ok_or(PheasantError::BadRequestLine)?
-        .try_into()?;
-
-    Ok((method, uri, params, proto))
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct RequestParams {
-    params: HashMap<String, String>,
-}
-
-impl RequestParams {
-    pub fn get_ref(&self, key: &str) -> Option<&str> {
-        self.params.get(key).map(|s| s.as_ref())
+    pub fn parse_query_param(&self, p: &str) -> Option<&str> {
+        self.uri
+            .query()?
+            .split('&')
+            .find(|e| e.starts_with(p))
+            .map(|v| &v[p.len() + 1..])
     }
 
-    pub fn remove(&mut self, key: &str) -> Option<String> {
-        self.params.remove(key)
+    pub fn parse_query_params(&self, p: &[&str]) -> Vec<&str> {
+        self.uri
+            .query()
+            .unwrap()
+            .split('&')
+            .filter(|e| p.into_iter().any(|p| e.starts_with(p)))
+            .map(|v| &v[p.len() + 1..])
+            .collect()
     }
-}
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct RequestHeaders {
-    headers: HashMap<String, String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct RequestBody {
-    body: HashMap<String, String>,
+    pub fn header<H: Header>(&self, key: &str) -> Option<H>
+    where
+        <H as std::str::FromStr>::Err: std::fmt::Debug,
+    {
+        // TODO handle the error
+        self.headers.get(key).map(|s| s.parse::<H>().unwrap())
+    }
 }
 
 #[non_exhaustive]
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Protocol {
     #[default]
-    V1_1,
-    V2,
+    HTTP1_1,
+}
+
+impl TryFrom<&[u8]> for Protocol {
+    type Error = PheasantError;
+
+    fn try_from(v: &[u8]) -> Result<Self, Self::Error> {
+        match v {
+            b"HTTP/1.1" => Ok(Self::HTTP1_1),
+            b"HTTP/2" | b"HTTP/3" => Err(Self::Error::ServerError(
+                ServerError::HTTPVersionNotSupported,
+            )),
+            _ => Err(Self::Error::ClientError(ClientError::BadRequest)),
+        }
+    }
 }
 
 impl TryFrom<&str> for Protocol {
@@ -157,38 +124,114 @@ impl TryFrom<&str> for Protocol {
 
     fn try_from(v: &str) -> Result<Self, Self::Error> {
         match v {
-            "HTTP/1.1" => Ok(Self::V1_1),
-            "HTTP/2" => Ok(Self::V2),
-            _ => Err(Self::Error::BadHttpVersion),
+            "HTTP/1.1" => Ok(Self::HTTP1_1),
+            "HTTP/2" | "HTTP/3" => Err(Self::Error::ServerError(
+                ServerError::HTTPVersionNotSupported,
+            )),
+            _ => Err(Self::Error::ClientError(ClientError::BadRequest)),
         }
     }
 }
 
-fn map_iter<'a, T: Iterator<Item = &'a str>>(key_sep: char, iter: T) -> HashMap<String, String> {
-    iter.map(|p| p.splitn(2, key_sep))
-        .map(|mut i| (i.next(), i.next()))
-        // this gets rid of all faulty pairs
-        .filter(|(a, b)| a.is_some() && b.is_some())
-        .map(|(a, b)| {
-            (
-                a.map(|s| s.to_string()).unwrap(),
-                b.map(|s| s.to_string()).unwrap(),
-            )
-        })
-        .collect()
+fn read_req_line(
+    v: &mut Vec<u8>,
+    s: &mut BufReader<&mut TcpStream>,
+) -> Result<usize, PheasantError> {
+    s.read_until(10, v)
+        .map_err(|_| PheasantError::ClientError(ClientError::BadRequest))
 }
 
-fn map_str(key_sep: char, pair_sep: char, map: &str) -> HashMap<String, String> {
-    map.split(pair_sep)
-        .map(|kv| kv.splitn(2, key_sep))
-        .map(|mut i| (i.next(), i.next()))
-        // this gets rid of all faulty pairs
-        .filter(|(a, b)| a.is_some() && b.is_some())
-        .map(|(a, b)| {
-            (
-                a.map(|s| s.to_string()).unwrap(),
-                b.map(|s| s.to_string()).unwrap(),
-            )
-        })
-        .collect()
+fn parse_req_line(
+    bytes: &mut impl Iterator<Item = u8>,
+) -> Result<(Method, Url, Protocol), PheasantError> {
+    let mut val = vec![];
+    while let Some(b) = bytes.next()
+        && b != 32
+    {
+        val.push(b);
+    }
+    let method = Method::try_from(val.as_slice())?;
+    val.clear();
+
+    while let Some(b) = bytes.next()
+        && b != 32
+    {
+        val.push(b);
+    }
+    let uri = Url::parse(str::from_utf8(&val)?)?;
+    val.clear();
+
+    let proto = bytes.fold(val, |mut acc, b| {
+        acc.push(b);
+        acc
+    });
+    let proto = Protocol::try_from(proto.as_slice())?;
+
+    Ok((method, uri, proto))
+}
+
+fn read_parse_headers(
+    v: &mut Vec<u8>,
+    s: &mut BufReader<&mut TcpStream>,
+) -> Result<HashMap<String, String>, PheasantError> {
+    let mut map = HashMap::new();
+
+    while let Ok(n) = s.read_until(10, v) {
+        if v.len() <= 2 && Some(&10) == v.last() {
+            break;
+        }
+        let [n, v] = {
+            let mut hf = v.drain(..);
+            let mut name = String::new();
+            while let Some(b) = hf.next() {
+                if b == b':' {
+                    break;
+                }
+                name.push(b as char);
+            }
+            let mut val = String::new();
+            while let Some(b) = hf.next() {
+                val.push(b as char);
+            }
+
+            [name, val]
+        };
+
+        map.insert(n, v);
+    }
+
+    Ok(map)
+}
+
+// WARN rn, if no content len header is found, server ignores request body
+// TODO handle body with missing content length
+fn read_body(
+    v: &mut Vec<u8>,
+    s: &mut BufReader<&mut TcpStream>,
+    len: usize,
+) -> Result<(), PheasantError> {
+    v.resize(len, 0);
+    s.read_exact(v)?;
+
+    Ok(())
+}
+
+pub trait Header: std::str::FromStr {}
+
+impl Header for usize {}
+
+trait MapHeader {
+    fn header<H: Header>(&self, key: &str) -> Option<H>
+    where
+        <H as std::str::FromStr>::Err: std::fmt::Debug;
+}
+
+impl MapHeader for HashMap<String, String> {
+    fn header<H: Header>(&self, key: &str) -> Option<H>
+    where
+        <H as std::str::FromStr>::Err: std::fmt::Debug,
+    {
+        // TODO handle the error
+        self.get(key).map(|s| s.parse::<H>().unwrap())
+    }
 }

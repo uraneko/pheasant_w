@@ -1,24 +1,24 @@
 // #![allow(unused_imports)]
 // #![allow(dead_code)]
 // #![allow(unused_variables)]
-
-use std::borrow::Borrow;
-use std::collections::HashMap;
-use std::io::{BufReader, BufWriter, Read, Write};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, TcpListener, TcpStream};
-use std::str::FromStr;
-use std::sync::mpsc::channel;
-use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle, scope, spawn};
+use std::str::Utf8Error;
+use std::string::FromUtf8Error;
 
 pub mod requests;
 pub mod server;
+pub mod service;
+pub mod status_codes;
 
-pub use requests::{Request, RequestBody, RequestParams};
-pub use server::{Server, Service};
+pub use requests::Request;
+pub use server::Server;
+pub use service::Service;
+pub use status_codes::{ClientError, ServerError};
 
 #[derive(Debug)]
 pub enum PheasantError {
+    ClientError(ClientError),
+    ServerError(ServerError),
+    RequestLineReadFailed,
     StreamReadCrached,
     StreamReadWithExcess,
     BytesParsingFailed,
@@ -43,13 +43,37 @@ impl std::fmt::Display for PheasantError {
 impl std::error::Error for PheasantError {}
 
 impl From<std::io::Error> for PheasantError {
-    fn from(err: std::io::Error) -> Self {
-        Self::IO(err)
+    fn from(_err: std::io::Error) -> Self {
+        Self::ClientError(ClientError::BadRequest)
+    }
+}
+
+impl From<std::num::ParseIntError> for PheasantError {
+    fn from(_err: std::num::ParseIntError) -> Self {
+        Self::ClientError(ClientError::BadRequest)
+    }
+}
+
+impl From<Utf8Error> for PheasantError {
+    fn from(_err: Utf8Error) -> Self {
+        Self::ClientError(ClientError::BadRequest)
+    }
+}
+
+impl From<FromUtf8Error> for PheasantError {
+    fn from(_err: FromUtf8Error) -> Self {
+        Self::ClientError(ClientError::BadRequest)
+    }
+}
+
+impl From<url::ParseError> for PheasantError {
+    fn from(_err: url::ParseError) -> Self {
+        Self::ClientError(ClientError::BadRequest)
     }
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum HttpMethod {
+pub enum Method {
     Head,
     #[default]
     Get,
@@ -62,7 +86,26 @@ pub enum HttpMethod {
     Trace,
 }
 
-impl TryFrom<&str> for HttpMethod {
+impl TryFrom<&[u8]> for Method {
+    type Error = PheasantError;
+
+    fn try_from(s: &[u8]) -> Result<Self, Self::Error> {
+        match s {
+            b"HEAD" => Ok(Self::Head),
+            b"GET" => Ok(Self::Get),
+            b"POST" => Ok(Self::Post),
+            b"PUT" => Ok(Self::Put),
+            b"PATCH" => Ok(Self::Patch),
+            b"DELETE" => Ok(Self::Delete),
+            b"CONNECT" => Ok(Self::Connect),
+            b"OPTIONS" => Ok(Self::Options),
+            b"TRACE" => Ok(Self::Trace),
+            _ => Err(Self::Error::ClientError(ClientError::BadRequest)),
+        }
+    }
+}
+
+impl TryFrom<&str> for Method {
     type Error = PheasantError;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
@@ -76,15 +119,7 @@ impl TryFrom<&str> for HttpMethod {
             "CONNECT" => Ok(Self::Connect),
             "OPTIONS" => Ok(Self::Options),
             "TRACE" => Ok(Self::Trace),
-            _ => Err(Self::Error::BadMethodName),
+            _ => Err(Self::Error::ClientError(ClientError::BadRequest)),
         }
     }
-}
-
-pub enum MimeType {
-    TextHtml,
-    TextJs,
-    TextCss,
-    ApplicationJson,
-    ImageSvgXml,
 }
