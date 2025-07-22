@@ -58,8 +58,8 @@ impl Service {
         self.method
     }
 
-    pub fn uri(&self) -> &Url {
-        &self.uri
+    pub fn uri(&self) -> &str {
+        &self.uri.path()
     }
 
     pub fn mime(&self) -> Option<&Mime> {

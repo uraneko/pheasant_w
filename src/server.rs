@@ -74,7 +74,7 @@ impl Server {
 }
 
 impl Server {
-    fn match_service(&self, method: Method, uri: &Url) -> Option<&Service> {
+    fn match_service(&self, method: Method, uri: &str) -> Option<&Service> {
         self.services
             .iter()
             .find(move |s| s.method() == method && s.uri() == uri)
