@@ -3,9 +3,16 @@
 version = 4
 
 [[package]]
+name = "impls"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a46645bbd70538861a90d0f26c31537cdf1e44aae99a794fb75a664b70951bc"
+
+[[package]]
 name = "pheasant_macro_get"
 version = "0.1.0"
 dependencies = [
+ "impls",
  "proc-macro2",
  "quote",
  "syn",

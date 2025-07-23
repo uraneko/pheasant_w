@@ -4,54 +4,30 @@ use proc_macro2::TokenStream as TS2;
 
 use syn::parse::{Parse, ParseStream, Result as PRes};
 use syn::parse_macro_input;
-use syn::{Attribute, Lit, LitStr, Token};
+use syn::{Attribute, Expr, Ident, ItemFn, Lit, LitStr, Token};
 
 use quote::quote;
+
+mod callback;
+mod resource;
+
+use callback::{mime, wrapper_fn};
+use resource::Resource;
 
 #[proc_macro_attribute]
 pub fn get(attr: TokenStream, func: TokenStream) -> TokenStream {
     // let [attr, func]: [TS2; 2] = [attr.into(), func.into()];
     // println!("{}\n{}", quote! {#attr}, quote! { #func  });
 
-    let attr = parse_macro_input!(attr as HttpMeta);
+    let resou = parse_macro_input!(attr as Resource);
+    let mut func = parse_macro_input!(func as ItemFn);
+    let mime = mime(&mut func);
 
-    println!("{:#?}", attr);
+    let wra_fun = wrapper_fn(resou.route(), mime, func);
+    println!("{}", quote! { #wra_fun });
 
-    quote! {}.into()
-}
-
-#[derive(Debug)]
-struct HttpMeta {
-    uri: String,
-    mime: Option<String>,
-}
-
-impl Parse for HttpMeta {
-    fn parse(s: ParseStream) -> PRes<Self> {
-        Ok(Self {
-            uri: {
-                let Ok(Lit::Str(sl)) = Lit::parse(s) else {
-                    return Err(syn::parse::Error::new(
-                        Span::call_site(),
-                        "wrong lit variant, expected str",
-                    ));
-                };
-
-                sl.value()
-            },
-            mime: if s.is_empty() {
-                None
-            } else {
-                _ = <Token![,]>::parse(s)?;
-                let Ok(Lit::Str(sl)) = Lit::parse(s) else {
-                    return Err(syn::parse::Error::new(
-                        Span::call_site(),
-                        "wrong lit variant, expected str",
-                    ));
-                };
-
-                Some(sl.value())
-            },
-        })
+    quote! {
+        #wra_fun
     }
+    .into()
 }
