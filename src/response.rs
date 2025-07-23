@@ -46,8 +46,11 @@ impl Response {
         headers.clear();
 
         let body = (service.service())(req).await;
+        let body = deflate::deflate_bytes(&body);
+        let body = deflate::deflate_bytes_gzip(&body);
         let len = body.len();
 
+        headers.insert("Content-Encoding".into(), "deflate, gzip".into());
         headers.insert("Content-Type".into(), mime.to_string());
         headers.insert("Content-Length".into(), format!("{}", len));
         headers.insert("Date".into(), Utc::now().to_string());
@@ -56,7 +59,7 @@ impl Response {
         Ok(Self {
             headers,
             proto,
-            body: Some(body),
+            body: if body.is_empty() { None } else { Some(body) },
             status: PassingStatus::Successful(Successful::OK),
         })
     }
@@ -91,4 +94,8 @@ fn mime(req: &Request, service: &Service) -> Mime {
 
     req.header::<Mime>("Content-Type")
         .unwrap_or(fallback.clone())
+}
+
+fn is_alerady_compressed(mime: &Mime) -> bool {
+    todo!()
 }

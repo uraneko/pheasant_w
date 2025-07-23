@@ -126,7 +126,7 @@ impl Server {
 
         let resp = Response::new(req, &self).await?;
         let payload = resp.respond();
-        println!("{}", str::from_utf8(&payload).unwrap());
+        // println!("{}", str::from_utf8(&payload).unwrap());
 
         stream.write_all(&payload)?;
         // println!("wrote to client; {:?}", stream.take_error());
@@ -170,6 +170,9 @@ fn format_response(payload: Vec<u8>, ct: &Mime) -> Vec<u8> {
 
     res
 }
+
+// rn can do services, also can easily add file
+// but what about database handling
 
 impl From<Request> for () {
     fn from(_p: Request) -> () {

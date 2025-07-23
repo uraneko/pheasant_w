@@ -10,6 +10,7 @@ path = "src/main.rs"
 [dependencies]
 chrono = "0.4.41"
 crossbeam-channel = "0.5.15"
+deflate = { version = "1.0.0", features = ["gzip"] }
 mime = "0.3.17"
 pheasant_macro_get = { version = "0.1.0", path = "../pheasant_macro_get" }
 serde = { version = "1.0.219", features = ["derive"] }
