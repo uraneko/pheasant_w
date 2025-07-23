@@ -24,7 +24,6 @@ pub fn get(attr: TokenStream, func: TokenStream) -> TokenStream {
     let mime = mime(&mut func);
 
     let wra_fun = wrapper_fn(resou.route(), mime, func);
-    println!("{}", quote! { #wra_fun });
 
     quote! {
         #wra_fun

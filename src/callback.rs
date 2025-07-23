@@ -44,8 +44,8 @@ pub fn wrapper_fn(route: String, mime: Option<String>, mut fun: ItemFn) -> TS2 {
     quote! {
         #fun
 
-        fn #ident() -> Service {
-            Service::new(Method::Get, #route, #mime, #suffixed)
+        fn #ident() -> pheasant_core::Service {
+            pheasant_core::Service::new(pheasant_core::Method::Get, #route, #mime, #suffixed)
         }
     }
 }
