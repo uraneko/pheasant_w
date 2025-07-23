@@ -1,24 +1,12 @@
 use std::pin::Pin;
 
-use super::{Method, Request};
+use super::{Method, Request, Route};
 
 use mime::Mime;
-use url::Url;
-
-use crate::server::join_path;
-
-pub struct ResponseBuilder {
-    method: Method,
-    uri: Url,
-    mime: Mime,
-    service: BoxFun,
-}
-
-pub struct Response {}
 
 pub struct Service {
     method: Method,
-    uri: Url,
+    route: Route,
     mime: Option<Mime>,
     service: BoxFun,
 }
@@ -32,7 +20,9 @@ type BoxFut<'a> = Pin<Box<dyn Future<Output = Vec<u8>> + Send + 'a>>;
 type BoxFun = Box<dyn Fn(Request) -> BoxFut<'static> + Send + Sync>;
 
 impl Service {
-    pub fn new<F, O, R>(method: Method, uri: &str, mime: &str, call: F) -> Self
+    // wrapper: W
+    // W: Fn() -> (Method, Url, Option<Mime>, F)
+    pub fn new<F, O, R>(method: Method, route: &str, mime: &str, call: F) -> Self
     where
         F: Fn(R) -> O + Send + Sync + 'static,
         O: Future<Output = Vec<u8>> + Send + 'static,
@@ -40,7 +30,7 @@ impl Service {
     {
         Self {
             method,
-            uri: join_path(uri),
+            route: route.into(),
             mime: mime.parse().ok(),
             service: Box::new(move |req: Request| {
                 let input: R = req.into();
@@ -58,8 +48,8 @@ impl Service {
         self.method
     }
 
-    pub fn uri(&self) -> &str {
-        &self.uri.path()
+    pub fn route(&self) -> &str {
+        &self.route.0
     }
 
     pub fn mime(&self) -> Option<&Mime> {

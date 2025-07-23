@@ -1,33 +1,31 @@
 use pheasant_core::{Method, Request, Server, Service};
+use pheasant_macro_get::get;
 
 #[tokio::main]
 async fn main() {
     let mut phe = Server::new([127, 0, 0, 1], 8883, 3333).unwrap();
-    phe.service(Service::new(Method::Get, "/hello", "text/html", hello));
-    phe.service(Service::new(
-        Method::Get,
-        "/favicon.ico",
-        "image/svg+xml",
-        favicon,
-    ));
-    phe.service(Service::new(Method::Get, "/icon", "image/svg+xml", svg));
+    phe.service(hello);
+    phe.service(|| Service::new(Method::Get, "/favicon.ico", "image/svg+xml", favicon));
+    phe.service(|| Service::new(Method::Get, "/icon", "image/svg+xml", svg));
     phe.serve().await;
 }
 
 struct Who {
-    who: String,
+    name: String,
 }
 
 impl From<Request> for Who {
     fn from(mut req: Request) -> Self {
         Self {
-            who: req.parse_query_param("who").unwrap().into(),
+            name: req.param("who").unwrap().into(),
         }
     }
 }
 
+#[get("/hello")]
+#[mime("text/html")]
 async fn hello(who: Who) -> Vec<u8> {
-    format!("<h1>hello {}</h1>", who.who).into_bytes()
+    format!("<h1>hello {}</h1>", who.name).into_bytes()
 }
 
 async fn favicon(_: ()) -> Vec<u8> {
@@ -38,5 +36,5 @@ async fn favicon(_: ()) -> Vec<u8> {
 
 // #[get("/icon")]
 async fn svg(who: Who) -> Vec<u8> {
-    std::fs::read_to_string(who.who).unwrap().into_bytes()
+    std::fs::read_to_string(who.name).unwrap().into_bytes()
 }

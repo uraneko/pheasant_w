@@ -4,14 +4,15 @@ use std::net::TcpStream;
 
 use url::Url;
 
-use super::{ClientError, Method, PheasantError, ServerError};
+use super::{ClientError, Method, PheasantError, Route, ServerError};
 use crate::server::join_path;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Request {
     method: Method,
     proto: Protocol,
-    uri: Url,
+    route: Route,
+    query: Option<HashMap<String, String>>,
     body: Option<String>,
     headers: HashMap<String, String>,
 }
@@ -22,7 +23,7 @@ impl Request {
         let mut reader = BufReader::new(stream);
         // if error we return 400 bad request
         _ = read_req_line(&mut v, &mut reader)?;
-        let (method, uri, proto) = parse_req_line(&mut v.drain(..))?;
+        let (method, route, query, proto) = parse_req_line(&mut v.drain(..))?;
         println!("parsed req line");
 
         let headers = read_parse_headers(&mut v, &mut reader)?;
@@ -41,7 +42,8 @@ impl Request {
         Ok(Self {
             method,
             proto,
-            uri,
+            route,
+            query,
             body,
             headers,
         })
@@ -51,45 +53,53 @@ impl Request {
         self.method
     }
 
-    pub fn uri(&self) -> &str {
-        &self.uri.path()
+    pub fn route(&self) -> &str {
+        &self.route.0
     }
 
-    pub fn query(&mut self) -> Option<&str> {
-        self.uri.query()
+    pub fn query(&mut self) -> Option<&HashMap<String, String>> {
+        self.query.as_ref()
     }
 
-    pub fn contains_query(&self) -> bool {
-        self.uri.query().is_some()
+    pub fn query_contains(&self) -> bool {
+        self.query.is_some()
     }
 
-    pub fn parse_query(&self) -> HashMap<&str, &str> {
-        self.uri
-            .query()
-            .unwrap()
-            .split('&')
-            .map(|e| -> [&str; 2] { e.splitn(2, '=').collect::<Vec<&str>>().try_into().unwrap() })
-            .map(|s| (s[0], s[1]))
-            .collect()
+    pub fn param(&self, key: &str) -> Option<&str> {
+        let Some(ref map) = self.query else {
+            return None;
+        };
+
+        map.get(key).map(|s| s.as_str())
     }
 
-    pub fn parse_query_param(&self, p: &str) -> Option<&str> {
-        self.uri
-            .query()?
-            .split('&')
-            .find(|e| e.starts_with(p))
-            .map(|v| &v[p.len() + 1..])
-    }
+    // pub fn parse_query(&self) -> HashMap<&str, &str> {
+    //     self
+    //         .query
+    //         .unwrap()
+    //         .split('&')
+    //         .map(|e| -> [&str; 2] { e.splitn(2, '=').collect::<Vec<&str>>().try_into().unwrap() })
+    //         .map(|s| (s[0], s[1]))
+    //         .collect()
+    // }
 
-    pub fn parse_query_params(&self, p: &[&str]) -> Vec<&str> {
-        self.uri
-            .query()
-            .unwrap()
-            .split('&')
-            .filter(|e| p.into_iter().any(|p| e.starts_with(p)))
-            .map(|v| &v[p.len() + 1..])
-            .collect()
-    }
+    // pub fn parse_query_param(&self, p: &str) -> Option<&str> {
+    //     self.route
+    //         .query()?
+    //         .split('&')
+    //         .find(|e| e.starts_with(p))
+    //         .map(|v| &v[p.len() + 1..])
+    // }
+
+    // pub fn parse_query_params(&self, p: &[&str]) -> Vec<&str> {
+    //     self.route
+    //         .query()
+    //         .unwrap()
+    //         .split('&')
+    //         .filter(|e| p.into_iter().any(|p| e.starts_with(p)))
+    //         .map(|v| &v[p.len() + 1..])
+    //         .collect()
+    // }
 
     pub fn header<H: Header>(&self, key: &str) -> Option<H>
     where
@@ -145,7 +155,7 @@ fn read_req_line(
 
 fn parse_req_line(
     bytes: &mut impl Iterator<Item = u8>,
-) -> Result<(Method, Url, Protocol), PheasantError> {
+) -> Result<(Method, Route, Option<HashMap<String, String>>, Protocol), PheasantError> {
     let mut val = vec![];
     while let Some(b) = bytes.next()
         && b != 32
@@ -161,7 +171,14 @@ fn parse_req_line(
         val.push(b);
     }
     let uri = str::from_utf8(&val)?;
-    let uri = join_path(uri);
+    let (route, query) = if uri.contains('?') {
+        let mut s = uri.splitn(2, '?');
+        (s.next().unwrap().into(), s.next().map(|q| parse_query(q)))
+    } else {
+        let route = uri.into();
+
+        (route, None)
+    };
     val.clear();
 
     let proto = bytes
@@ -173,7 +190,7 @@ fn parse_req_line(
     println!("p -> {:?}", proto);
     let proto = Protocol::try_from(proto.as_slice())?;
 
-    Ok((method, uri, proto))
+    Ok((method, route, query, proto))
 }
 
 fn read_parse_headers(
@@ -240,4 +257,12 @@ impl MapHeader for HashMap<String, String> {
         // TODO handle the error
         self.get(key).map(|s| s.parse::<H>().unwrap())
     }
+}
+
+fn parse_query(query: &str) -> HashMap<String, String> {
+    query
+        .split('&')
+        .map(|e| -> [&str; 2] { e.splitn(2, '=').collect::<Vec<&str>>().try_into().unwrap() })
+        .map(|s| (s[0].to_string(), s[1].to_string()))
+        .collect()
 }

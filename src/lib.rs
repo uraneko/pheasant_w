@@ -72,6 +72,15 @@ impl From<url::ParseError> for PheasantError {
     }
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+pub struct Route(String);
+
+impl From<&str> for Route {
+    fn from(s: &str) -> Self {
+        Self(s.to_owned())
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Method {
     Head,

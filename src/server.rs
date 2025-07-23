@@ -5,7 +5,7 @@ use mime::Mime;
 use serde::Serialize;
 use url::Url;
 
-use super::{Method, PheasantError, Request, Service};
+use super::{Method, PheasantError, Request, Route, Service};
 
 pub fn base_url() -> Url {
     Url::parse("http://127.0.0.1:8883").unwrap()
@@ -68,16 +68,43 @@ impl Server {
     }
 
     /// pushes a new service to the server
-    pub fn service(&mut self, service: Service) {
-        self.services.push(service);
+    pub fn service<S>(&mut self, s: S)
+    where
+        S: Fn() -> Service,
+    {
+        self.services.push(s());
     }
 }
 
+// impl<F, O, R> From<(Method, &str, &str, F)> for Service
+// where
+//     F: Fn(R) -> O + Send + Sync + 'static,
+//     O: Future<Output = Vec<u8>> + Send + 'static,
+//     R: From<Request>,
+// {
+//     fn from(s: (Method, &str, &str, F)) -> Self {
+//         Service::new(s.0, s.1, s.2, s.3)
+//     }
+// }
+
+// impl<F, O, R, W> From<W> for Service
+// where
+//     F: Fn(R) -> O + Send + Sync + 'static,
+//     O: Future<Output = Vec<u8>> + Send + 'static,
+//     R: From<Request>,
+//     W: Fn() -> (Method, Route, Option<Mime>, F),
+// {
+//     fn from(s: W) -> Self {
+//         let s = s();
+//         Service::from_wrapper(s.0, s.1, s.2, s.3)
+//     }
+// }
+
 impl Server {
-    fn match_service(&self, method: Method, uri: &str) -> Option<&Service> {
+    fn match_service(&self, method: Method, route: &str) -> Option<&Service> {
         self.services
             .iter()
-            .find(move |s| s.method() == method && s.uri() == uri)
+            .find(move |s| s.method() == method && s.route() == route)
     }
 
     pub async fn serve(&mut self) {
@@ -95,7 +122,7 @@ impl Server {
 
         // println!("method: {:?}, uri: {}", req.method(), req.uri());
         let service = self
-            .match_service(req.method(), req.uri())
+            .match_service(req.method(), req.route())
             .unwrap_or(&self.services[0]);
 
         let payload = (service.service())(req).await;
