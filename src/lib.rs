@@ -5,14 +5,18 @@ use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 
 pub mod requests;
+pub mod response;
 pub mod server;
 pub mod service;
 pub mod status_codes;
 
-pub use requests::Request;
+pub use requests::{Protocol, Request};
+pub use response::Response;
 pub use server::Server;
 pub use service::Service;
-pub use status_codes::{ClientError, ServerError};
+pub use status_codes::{
+    ClientError, Informational, PassingStatus, Redirection, ResponseStatus, ServerError, Successful,
+};
 
 #[derive(Debug)]
 pub enum PheasantError {
@@ -77,7 +81,13 @@ pub struct Route(String);
 
 impl From<&str> for Route {
     fn from(s: &str) -> Self {
-        Self(s.to_owned())
+        let s = if !s.starts_with('/') {
+            format!("/{}", s)
+        } else {
+            s.to_string()
+        };
+
+        Self(s)
     }
 }
 

@@ -5,7 +5,7 @@ use pheasant_macro_get::get;
 async fn main() {
     let mut phe = Server::new([127, 0, 0, 1], 8883, 3333).unwrap();
     phe.service(hello);
-    phe.service(|| Service::new(Method::Get, "/favicon.ico", "image/svg+xml", favicon));
+    phe.service(favicon);
     phe.service(|| Service::new(Method::Get, "/icon", "image/svg+xml", svg));
     phe.serve().await;
 }
@@ -15,7 +15,7 @@ struct Who {
 }
 
 impl From<Request> for Who {
-    fn from(mut req: Request) -> Self {
+    fn from(req: Request) -> Self {
         Self {
             name: req.param("who").unwrap().into(),
         }
@@ -28,6 +28,7 @@ async fn hello(who: Who) -> Vec<u8> {
     format!("<h1>hello {}</h1>", who.name).into_bytes()
 }
 
+#[get("favicon.ico")]
 async fn favicon(_: ()) -> Vec<u8> {
     std::fs::read_to_string("assets/404.svg")
         .unwrap()
@@ -35,6 +36,7 @@ async fn favicon(_: ()) -> Vec<u8> {
 }
 
 // #[get("/icon")]
+// #[mime("image/svg+xml")]
 async fn svg(who: Who) -> Vec<u8> {
     std::fs::read_to_string(who.name).unwrap().into_bytes()
 }

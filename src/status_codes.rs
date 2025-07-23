@@ -1,5 +1,5 @@
 #[repr(u16)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ServerError {
     InternalServerError = 500,
     NotImplemented = 501,
@@ -15,7 +15,7 @@ pub enum ServerError {
 }
 
 #[repr(u16)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ClientError {
     BadRequest = 400,
     Unauthorized = 401,
@@ -49,6 +49,8 @@ pub enum ClientError {
     UnavailableForLegalReasons = 451,
 }
 
+#[repr(u16)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Redirection {
     PermanentRedirect = 308,
     TemporaryRedirect = 307,
@@ -70,6 +72,7 @@ pub enum Redirection {
 }
 
 #[repr(u16)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Successful {
     IMUsed = 226,
     AlreadyReported = 208,
@@ -84,9 +87,161 @@ pub enum Successful {
 }
 
 #[repr(u16)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Informational {
     EarlyHints = 103,
     ProcessingDeprecated = 102,
     SwitchingProtocols = 101,
     Continue = 100,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum PassingStatus {
+    Informational(Informational),
+    Successful(Successful),
+    Redirection(Redirection),
+}
+
+pub trait ResponseStatus {
+    fn text(&self) -> &str;
+
+    fn code(&self) -> u16;
+}
+
+impl ResponseStatus for ServerError {
+    fn text(&self) -> &str {
+        match self {
+            Self::InternalServerError => "InternalServerError",
+            Self::NotImplemented => "NotImplemented",
+            Self::BadGateway => "BadGateway",
+            Self::ServiceUnavailable => "ServiceUnavailable",
+            Self::GatewayTimeout => "GatewayTimeout",
+            Self::HTTPVersionNotSupported => "HTTPVersionNotSupported",
+            Self::VariantAlsoNegotiates => "VariantAlsoNegotiates",
+            Self::InsufficientStorage => "InsufficientStorage",
+            Self::LoopDetected => "LoopDetected",
+            Self::NotExtended => "NotExtended",
+            Self::NetworkAuthenticationRequired => "NetworkAuthenticationRequired",
+        }
+    }
+
+    fn code(&self) -> u16 {
+        unsafe { std::mem::transmute::<Self, u16>(*self) }
+    }
+}
+
+impl ResponseStatus for ClientError {
+    fn text(&self) -> &str {
+        match self {
+            Self::BadRequest => "BadRequest",
+            Self::Unauthorized => "Unauthorized",
+            Self::PaymentRequired => "PaymentRequired",
+            Self::Forbidden => "Forbidden",
+            Self::NotFound => "NotFound",
+            Self::MethodNotAllowed => "MethodNotAllowed",
+            Self::NotAcceptable => "NotAcceptable",
+            Self::ProxyAuthenticationRequired => "ProxyAuthenticationRequired",
+            Self::RequestTimeout => "RequestTimeout",
+            Self::Conflict => "Conflict",
+            Self::Gone => "Gone",
+            Self::LengthRequired => "LengthRequired",
+            Self::PreconditionFailed => "PreconditionFailed",
+            Self::ContentTooLarge => "ContentTooLarge",
+            Self::URITooLong => "URITooLong",
+            Self::UnsupportedMediaType => "UnsupportedMediaType",
+            Self::RangeNotSatisfiable => "RangeNotSatisfiable",
+            Self::ExpectationFailed => "ExpectationFailed",
+            Self::Imateapot => "Imateapot",
+            Self::MisdirectedRequest => "MisdirectedRequest",
+            Self::UnprocessableContent => "UnprocessableContent",
+            Self::Locked => "Locked",
+            Self::FailedDependency => "FailedDependency",
+            Self::TooEarly => "TooEarly",
+            Self::UpgradeRequired => "UpgradeRequired",
+            Self::PreconditionRequired => "PreconditionRequired",
+            Self::TooManyRequests => "TooManyRequests",
+            Self::RequestHeaderFieldsTooLarge => "RequestHeaderFieldsTooLarge",
+            Self::UnavailableForLegalReasons => "UnavailableForLegalReasons",
+        }
+    }
+
+    fn code(&self) -> u16 {
+        unsafe { std::mem::transmute::<Self, u16>(*self) }
+    }
+}
+
+impl ResponseStatus for Redirection {
+    fn text(&self) -> &str {
+        match self {
+            Self::PermanentRedirect => "PermanentRedirect",
+            Self::TemporaryRedirect => "TemporaryRedirect",
+            Self::Unused => "Unused",
+            Self::UseProxyDeprecated => "UseProxyDeprecated",
+            Self::NotModified => "NotModified",
+            Self::SeeOther => "SeeOther",
+            Self::Found => "Found",
+            Self::MovedPermanently => "MovedPermanently",
+            Self::MultipleChoices => "MultipleChoices",
+        }
+    }
+
+    fn code(&self) -> u16 {
+        unsafe { std::mem::transmute::<Self, u16>(*self) }
+    }
+}
+
+impl ResponseStatus for Successful {
+    fn text(&self) -> &str {
+        match self {
+            Self::IMUsed => "IMUsed",
+            Self::AlreadyReported => "AlreadyReported",
+            Self::MultiStatus => "MultiStatus",
+            Self::PartialContent => "PartialContent",
+            Self::ResetContent => "ResetContent",
+            Self::NoContent => "NoContent",
+            Self::NonAuthoritativeInformation => "NonAuthoritativeInformation",
+            Self::Accepted => "Accepted",
+            Self::Created => "Created",
+            Self::OK => "OK",
+        }
+    }
+
+    fn code(&self) -> u16 {
+        // NOTE this is safe
+        // trust me bro
+        unsafe { std::mem::transmute::<Self, u16>(*self) }
+    }
+}
+
+impl ResponseStatus for Informational {
+    fn text(&self) -> &str {
+        match self {
+            Self::EarlyHints => "EarlyHints",
+            Self::ProcessingDeprecated => "ProcessingDeprecated",
+            Self::SwitchingProtocols => "SwitchingProtocols",
+            Self::Continue => "Continue",
+        }
+    }
+
+    fn code(&self) -> u16 {
+        unsafe { std::mem::transmute::<Self, u16>(*self) }
+    }
+}
+
+impl ResponseStatus for PassingStatus {
+    fn text(&self) -> &str {
+        match self {
+            Self::Redirection(r) => r.text(),
+            Self::Successful(s) => s.text(),
+            Self::Informational(i) => i.text(),
+        }
+    }
+
+    fn code(&self) -> u16 {
+        match self {
+            Self::Redirection(r) => r.code(),
+            Self::Successful(s) => s.code(),
+            Self::Informational(i) => i.code(),
+        }
+    }
 }

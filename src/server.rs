@@ -5,7 +5,7 @@ use mime::Mime;
 use serde::Serialize;
 use url::Url;
 
-use super::{Method, PheasantError, Request, Route, Service};
+use super::{Method, PheasantError, Request, Response, Route, Service};
 
 pub fn base_url() -> Url {
     Url::parse("http://127.0.0.1:8883").unwrap()
@@ -101,10 +101,14 @@ impl Server {
 // }
 
 impl Server {
-    fn match_service(&self, method: Method, route: &str) -> Option<&Service> {
+    pub fn borrow_service(&self, method: Method, route: &str) -> Option<&Service> {
         self.services
             .iter()
             .find(move |s| s.method() == method && s.route() == route)
+    }
+
+    pub fn fallback_service(&self) -> &Service {
+        &self.services[0]
     }
 
     pub async fn serve(&mut self) {
@@ -120,19 +124,11 @@ impl Server {
         let req = Request::from_stream(&mut stream)?;
         println!("{:#?}", req);
 
-        // println!("method: {:?}, uri: {}", req.method(), req.uri());
-        let service = self
-            .match_service(req.method(), req.route())
-            .unwrap_or(&self.services[0]);
+        let resp = Response::new(req, &self).await?;
+        let payload = resp.respond();
+        println!("{}", str::from_utf8(&payload).unwrap());
 
-        let payload = (service.service())(req).await;
-        let response = format_response(
-            payload,
-            service.mime().unwrap_or(&mime::APPLICATION_OCTET_STREAM),
-        );
-        // println!("{}", String::from_utf8_lossy(&response));
-
-        stream.write_all(&response)?;
+        stream.write_all(&payload)?;
         // println!("wrote to client; {:?}", stream.take_error());
         stream.flush()?;
         // println!("flushed buffer; {:?}", stream.take_error());
@@ -141,6 +137,7 @@ impl Server {
     }
 }
 
+#[deprecated(note = "replaced by Request::from_stream")]
 async fn read_stream(s: &mut TcpStream) -> Result<String, PheasantError> {
     let mut data = Vec::new();
     let mut reader = BufReader::new(s);
@@ -160,6 +157,7 @@ async fn read_stream(s: &mut TcpStream) -> Result<String, PheasantError> {
     String::from_utf8(data).map_err(|e| e.into())
 }
 
+#[deprecated(note = "replaced by Response::respond")]
 fn format_response(payload: Vec<u8>, ct: &Mime) -> Vec<u8> {
     let cl = payload.len();
     let mut res: Vec<u8> = format!(

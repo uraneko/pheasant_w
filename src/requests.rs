@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
 use std::net::TcpStream;
 
-use url::Url;
+use mime::Mime;
 
 use super::{ClientError, Method, PheasantError, Route, ServerError};
 use crate::server::join_path;
@@ -108,13 +108,33 @@ impl Request {
         // TODO handle the error
         self.headers.get(key).map(|s| s.parse::<H>().unwrap())
     }
+
+    pub fn proto(&self) -> Protocol {
+        self.proto
+    }
+
+    pub fn headers(&mut self) -> HashMap<String, String> {
+        std::mem::take(&mut self.headers)
+    }
 }
 
 #[non_exhaustive]
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Protocol {
     #[default]
     HTTP1_1,
+}
+
+impl std::fmt::Display for Protocol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::HTTP1_1 => "HTTP/1.1",
+            }
+        )
+    }
 }
 
 impl TryFrom<&[u8]> for Protocol {
@@ -213,7 +233,9 @@ fn read_parse_headers(
                 name.push(b as char);
             }
             let mut val = String::new();
-            while let Some(b) = hf.next() {
+            while let Some(b) = hf.next()
+                && ![13, 10].contains(&b)
+            {
                 val.push(b as char);
             }
 
@@ -242,6 +264,7 @@ fn read_body(
 pub trait Header: std::str::FromStr {}
 
 impl Header for usize {}
+impl Header for Mime {}
 
 trait MapHeader {
     fn header<H: Header>(&self, key: &str) -> Option<H>
