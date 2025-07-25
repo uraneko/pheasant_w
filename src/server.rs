@@ -6,8 +6,8 @@ use serde::Serialize;
 use url::Url;
 
 use super::{
-    ClientError, Method, PassingStatus, PheasantError, Redirection, Request, Response, Route,
-    Service, Successful,
+    ClientError, Method, PheasantError, PheasantResult, Redirection, Request, Response, Route,
+    Service, Status, Successful,
 };
 
 pub fn base_url() -> Url {
@@ -51,7 +51,7 @@ impl Server {
     /// let workers = 90000;
     /// let server = Server::new(workers, addr, port)
     /// ```
-    pub fn new(addr: impl Into<Ipv4Addr>, port: u16, max: usize) -> Result<Self, PheasantError> {
+    pub fn new(addr: impl Into<Ipv4Addr>, port: u16, max: usize) -> PheasantResult<Self> {
         Ok(Self {
             socket: {
                 let addr = addr.into();
@@ -109,20 +109,21 @@ impl Server {
 // }
 
 impl Server {
+    /// returns the requested service if any with an http status code
     pub fn service_status(
         &self,
         method: Method,
         route: &str,
-    ) -> Result<(PassingStatus, &Service), PheasantError> {
+    ) -> PheasantResult<(Status, &Service)> {
         let service = self
             .services
             .iter()
             .find(move |s| s.method() == method && (s.route() == route || s.redirects_to(&route)));
 
         match service {
-            Some(s) if s.route() == route => Ok((PassingStatus::Successful(Successful::OK), s)),
+            Some(s) if s.route() == route => Ok((Status::Successful(Successful::OK), s)),
             Some(s) if s.redirects_to(&route) => {
-                Ok((PassingStatus::Redirection(Redirection::SeeOther), s))
+                Ok((Status::Redirection(Redirection::SeeOther), s))
             }
             None => Err(PheasantError::ClientError(ClientError::NotFound)),
             Some(_) => unreachable!("filtered out arm not reachable"),
@@ -142,11 +143,11 @@ impl Server {
         }
     }
 
-    async fn handle_stream(&self, mut stream: TcpStream) -> Result<TcpStream, PheasantError> {
-        let req = Request::from_stream(&mut stream)?;
+    async fn handle_stream(&self, mut stream: TcpStream) -> PheasantResult<TcpStream> {
+        let req = Request::from_stream(&mut stream);
         println!("{:#?}", req);
 
-        let resp = Response::new(req, &self).await?;
+        let resp = Response::new(req, &self).await;
         let payload = resp.respond();
         // println!("{}", str::from_utf8(&payload).unwrap());
 
@@ -159,39 +160,39 @@ impl Server {
     }
 }
 
-#[deprecated(note = "replaced by Request::from_stream")]
-async fn read_stream(s: &mut TcpStream) -> Result<String, PheasantError> {
-    let mut data = Vec::new();
-    let mut reader = BufReader::new(s);
-    let mut buf = [0; 1024];
-    loop {
-        let Ok(n) = reader.read(&mut buf) else {
-            return Err(PheasantError::StreamReadCrached);
-        };
-        if n < 1024 {
-            break data.extend(&buf[..n]);
-        } else if n > 1024 {
-            return Err(PheasantError::StreamReadWithExcess);
-        }
-        data.extend(buf);
-    }
+// #[deprecated(note = "replaced by Request::from_stream")]
+// async fn read_stream(s: &mut TcpStream) -> PheasantResult<String> {
+//     let mut data = Vec::new();
+//     let mut reader = BufReader::new(s);
+//     let mut buf = [0; 1024];
+//     loop {
+//         let Ok(n) = reader.read(&mut buf) else {
+//             return Err(PheasantError::StreamReadCrached);
+//         };
+//         if n < 1024 {
+//             break data.extend(&buf[..n]);
+//         } else if n > 1024 {
+//             return Err(PheasantError::StreamReadWithExcess);
+//         }
+//         data.extend(buf);
+//     }
+//
+//     String::from_utf8(data).map_err(|e| e.into())
+// }
 
-    String::from_utf8(data).map_err(|e| e.into())
-}
-
-#[deprecated(note = "replaced by Response::respond")]
-fn format_response(payload: Vec<u8>, ct: &Mime) -> Vec<u8> {
-    let cl = payload.len();
-    let mut res: Vec<u8> = format!(
-        "HTTP/1.1 200 OK\r\nAccept-Range: bytes\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n",
-        ct, cl
-    )
-    .into_bytes();
-    res.extend(payload);
-    res.extend([13, 10]);
-
-    res
-}
+// #[deprecated(note = "replaced by Response::respond")]
+// fn format_response(payload: Vec<u8>, ct: &Mime) -> Vec<u8> {
+//     let cl = payload.len();
+//     let mut res: Vec<u8> = format!(
+//         "HTTP/1.1 200 OK\r\nAccept-Range: bytes\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n",
+//         ct, cl
+//     )
+//     .into_bytes();
+//     res.extend(payload);
+//     res.extend([13, 10]);
+//
+//     res
+// }
 
 // rn can do services, also can easily add file
 // but what about database handling

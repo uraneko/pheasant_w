@@ -1,3 +1,5 @@
+use crate::PheasantError;
+
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ServerError {
@@ -96,10 +98,22 @@ pub enum Informational {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum PassingStatus {
+pub enum Status {
     Informational(Informational),
     Successful(Successful),
     Redirection(Redirection),
+    ClientError(ClientError),
+    ServerError(ServerError),
+}
+
+impl From<PheasantError> for Status {
+    fn from(err: PheasantError) -> Self {
+        match err {
+            PheasantError::ClientError(ce) => Self::ClientError(ce),
+
+            PheasantError::ServerError(se) => Self::ServerError(se),
+        }
+    }
 }
 
 pub trait ResponseStatus {
@@ -228,12 +242,14 @@ impl ResponseStatus for Informational {
     }
 }
 
-impl ResponseStatus for PassingStatus {
+impl ResponseStatus for Status {
     fn text(&self) -> &str {
         match self {
             Self::Redirection(r) => r.text(),
             Self::Successful(s) => s.text(),
             Self::Informational(i) => i.text(),
+            Self::ClientError(ce) => ce.text(),
+            Self::ServerError(se) => se.text(),
         }
     }
 
@@ -242,6 +258,8 @@ impl ResponseStatus for PassingStatus {
             Self::Redirection(r) => r.code(),
             Self::Successful(s) => s.code(),
             Self::Informational(i) => i.code(),
+            Self::ClientError(ce) => ce.code(),
+            Self::ServerError(se) => se.code(),
         }
     }
 }

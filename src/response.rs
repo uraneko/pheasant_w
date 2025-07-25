@@ -5,18 +5,18 @@ use mime::Mime;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::{
-    ClientError, PassingStatus, PheasantError, Protocol, Redirection, Request, ResponseStatus,
-    Route, Server, ServerError, Service, Successful,
+    ClientError, PheasantError, PheasantResult, Protocol, Redirection, Request, ResponseStatus,
+    Route, Server, ServerError, Service, Status, Successful,
 };
 
-const SERVER: &str = "Pheasant-DevServer / 0.1.0";
+const SERVER: &str = "Pheasant (dev/0.1.0)";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Response {
     proto: Protocol,
     body: Option<Vec<u8>>,
     headers: HashMap<String, String>,
-    status: PassingStatus,
+    status: Status,
 }
 
 impl Serialize for Response {
@@ -32,18 +32,27 @@ impl Serialize for Response {
 }
 
 impl Response {
-    pub async fn new(mut req: Request, server: &Server) -> Result<Self, PheasantError> {
-        // if None then 404 not found
-        let (status, service) = server.service_status(req.method(), req.route())?;
+    pub async fn new(mut req: PheasantResult<Request>, server: &Server) -> Self {
+        if let Err(err) = req {
+            return Self::from_err(err).await;
+        }
+
+        let req = req.unwrap();
         let proto = req.proto();
 
+        let ss = server.service_status(req.method(), req.route());
+        if let Err(err) = ss {
+            return Self::from_err(err).await;
+        }
+        let (status, service) = ss.unwrap();
+
         let (headers, body) = match status {
-            PassingStatus::Successful(Successful::OK) => {
+            Status::Successful(Successful::OK) => {
                 let (h, b) = successful(req, service).await;
 
                 (h, Some(b))
             }
-            PassingStatus::Redirection(Redirection::SeeOther) => {
+            Status::Redirection(Redirection::SeeOther) => {
                 let h = redirection(req, service).await;
 
                 (h, None)
@@ -51,12 +60,27 @@ impl Response {
             _ => unimplemented!("other status codes are not yet implemented; {}", file!()),
         };
 
-        Ok(Self {
+        Self {
             headers,
             proto,
             body,
             status,
-        })
+        }
+    }
+
+    pub async fn from_err(err: PheasantError) -> Self {
+        let (headers, body) = match err {
+            PheasantError::ServerError(se) => server_error(&se).await,
+            PheasantError::ClientError(ce) => client_error(&ce).await,
+        };
+        let body = Some(body);
+
+        return Self {
+            proto: Protocol::HTTP1_1,
+            status: Status::from(err),
+            headers,
+            body,
+        };
     }
 
     pub fn respond(self) -> Vec<u8> {
@@ -130,4 +154,67 @@ pub async fn redirection(mut req: Request, service: &Service) -> HashMap<String,
     headers.insert("Content-Length".into(), String::from("0"));
 
     headers
+}
+
+pub async fn client_error(status: &ClientError) -> (HashMap<String, String>, Vec<u8>) {
+    match status {
+        ClientError::BadRequest => bad_request().await,
+        ClientError::NotFound => not_found().await,
+        _ => unimplemented!("the rest of the client error statuses are not yet implemented"),
+    }
+}
+
+const BAD_REQUEST: &[u8] = include_bytes!("../templates/400.html");
+
+pub async fn bad_request() -> (HashMap<String, String>, Vec<u8>) {
+    // let body = b"{\n\t'error': 'Bad Request'\n\t'message': 'Some redundant response body'\n}";
+    let body = BAD_REQUEST.to_vec();
+    let len = body.len();
+
+    (
+        HashMap::from([
+            ("Content-Type".into(), "text/html".into()),
+            ("Content-Length".into(), format!("{}", len)),
+        ]),
+        body,
+    )
+}
+
+const NOT_FOUND: &[u8] = include_bytes!("../templates/404.html");
+
+pub async fn not_found() -> (HashMap<String, String>, Vec<u8>) {
+    let body = NOT_FOUND.to_vec();
+    let len = body.len();
+
+    (
+        HashMap::from([
+            ("Content-Type".into(), "text/html".into()),
+            ("Content-Length".into(), format!("{}", len)),
+            ("Server".into(), SERVER.into()),
+            ("Date".into(), Utc::now().to_string()),
+        ]),
+        body,
+    )
+}
+
+pub async fn server_error(status: &ServerError) -> (HashMap<String, String>, Vec<u8>) {
+    match status {
+        ServerError::HTTPVersionNotSupported => http_version_not_supported().await,
+        _ => unimplemented!("not yet implemeted status code; {}", file!()),
+    }
+}
+
+const VERSION_NOT_SUPPORTED: &[u8] = include_bytes!("../templates/505.html");
+
+pub async fn http_version_not_supported() -> (HashMap<String, String>, Vec<u8>) {
+    let body = VERSION_NOT_SUPPORTED.to_vec();
+    let len = body.len();
+
+    (
+        HashMap::from([
+            ("Content-Type".into(), "text/html".into()),
+            ("Content-Length".into(), format!("{}", len)),
+        ]),
+        body,
+    )
 }

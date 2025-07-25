@@ -15,29 +15,17 @@ pub use response::Response;
 pub use server::Server;
 pub use service::Service;
 pub use status_codes::{
-    ClientError, Informational, PassingStatus, Redirection, ResponseStatus, ServerError, Successful,
+    ClientError, Informational, Redirection, ResponseStatus, ServerError, Status, Successful,
 };
 
 pub use pheasant_macro_get::get;
+
+pub type PheasantResult<T> = Result<T, PheasantError>;
 
 #[derive(Debug)]
 pub enum PheasantError {
     ClientError(ClientError),
     ServerError(ServerError),
-    RequestLineReadFailed,
-    StreamReadCrached,
-    StreamReadWithExcess,
-    BytesParsingFailed,
-    RequestIsEmpty,
-    ExpectedRequestBody,
-    InvalidIPAddr,
-    RequestLineNotFound,
-    BadRequestLine,
-    BadMethodName,
-    BadHttpVersion,
-    RequestUriNotFound,
-    InitialThreadCapacityHigherThanMaximumThreadsAllowed,
-    IO(std::io::Error),
 }
 
 impl std::fmt::Display for PheasantError {

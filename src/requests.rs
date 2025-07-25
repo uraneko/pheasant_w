@@ -4,7 +4,7 @@ use std::net::TcpStream;
 
 use mime::Mime;
 
-use super::{ClientError, Method, PheasantError, Route, ServerError};
+use super::{ClientError, Method, PheasantError, PheasantResult, Route, ServerError};
 use crate::server::join_path;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -18,7 +18,7 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn from_stream(stream: &mut TcpStream) -> Result<Self, PheasantError> {
+    pub fn from_stream(stream: &mut TcpStream) -> PheasantResult<Self> {
         let mut v = vec![];
         let mut reader = BufReader::new(stream);
         // if error we return 400 bad request
@@ -169,10 +169,7 @@ impl TryFrom<&str> for Protocol {
     }
 }
 
-fn read_req_line(
-    v: &mut Vec<u8>,
-    s: &mut BufReader<&mut TcpStream>,
-) -> Result<usize, PheasantError> {
+fn read_req_line(v: &mut Vec<u8>, s: &mut BufReader<&mut TcpStream>) -> PheasantResult<usize> {
     s.read_until(10, v)
         .map_err(|_| PheasantError::ClientError(ClientError::BadRequest))
 }
@@ -220,7 +217,7 @@ fn parse_req_line(
 fn read_parse_headers(
     v: &mut Vec<u8>,
     s: &mut BufReader<&mut TcpStream>,
-) -> Result<HashMap<String, String>, PheasantError> {
+) -> PheasantResult<HashMap<String, String>> {
     let mut map = HashMap::new();
 
     while let Ok(n) = s.read_until(10, v) {
@@ -256,11 +253,7 @@ fn read_parse_headers(
 
 // WARN rn, if no content len header is found, server ignores request body
 // TODO handle body with missing content length
-fn read_body(
-    v: &mut Vec<u8>,
-    s: &mut BufReader<&mut TcpStream>,
-    len: usize,
-) -> Result<(), PheasantError> {
+fn read_body(v: &mut Vec<u8>, s: &mut BufReader<&mut TcpStream>, len: usize) -> PheasantResult<()> {
     v.resize(len, 0);
     s.read_exact(v)?;
 
