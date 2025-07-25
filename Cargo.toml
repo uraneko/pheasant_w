@@ -7,8 +7,16 @@ edition = "2024"
 proc-macro = true
 
 [[test]]
-name = "ss"
-path = "tests/syntax_semantics.rs"
+name = "basic"
+path = "tests/basic.rs"
+
+[[test]]
+name = "mime"
+path = "tests/mime.rs"
+
+[[test]]
+name = "re"
+path = "tests/re.rs"
 
 [[bin]]
 path = "src/main.rs"

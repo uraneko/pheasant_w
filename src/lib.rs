@@ -11,19 +11,20 @@ use quote::quote;
 mod callback;
 mod resource;
 
-use callback::{mime, wrapper_fn};
-use resource::Resource;
+use callback::wrapper_fn;
+use resource::{Resource, mime, re};
 
 #[proc_macro_attribute]
-pub fn get(attr: TokenStream, func: TokenStream) -> TokenStream {
-    // let [attr, func]: [TS2; 2] = [attr.into(), func.into()];
-    // println!("{}\n{}", quote! {#attr}, quote! { #func  });
+pub fn get(attr: TokenStream, fun: TokenStream) -> TokenStream {
+    // let [attr, fun]: [TS2; 2] = [attr.into(), fun.into()];
+    // println!("{}\n{}", quote! {#attr}, quote! { #fun  });
 
     let resou = parse_macro_input!(attr as Resource);
-    let mut func = parse_macro_input!(func as ItemFn);
-    let mime = mime(&mut func);
+    let mut fun = parse_macro_input!(fun as ItemFn);
+    let mime = mime(&mut fun);
+    let re = re(&mut fun);
 
-    let wra_fun = wrapper_fn(resou.route(), mime, func);
+    let wra_fun = wrapper_fn(resou.route(), re, mime, fun);
 
     quote! {
         #wra_fun
