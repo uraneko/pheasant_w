@@ -28,7 +28,7 @@ pub fn wrapper_fn(
     };
 
     let re = if let Some(re) = re {
-        quote! { &[#(#re,)*] }
+        quote! { [#(#re,)*] }
     } else {
         quote! { [] }
     };
