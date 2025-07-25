@@ -1,12 +1,13 @@
 use std::pin::Pin;
 
-use super::{Method, Request, Route};
+use super::{IntoRoutes, Method, Request, Route};
 
 use mime::Mime;
 
 pub struct Service {
     method: Method,
     route: Route,
+    redirects: Vec<Route>,
     mime: Option<Mime>,
     service: BoxFun,
 }
@@ -22,15 +23,17 @@ type BoxFun = Box<dyn Fn(Request) -> BoxFut<'static> + Send + Sync>;
 impl Service {
     // wrapper: W
     // W: Fn() -> (Method, Url, Option<Mime>, F)
-    pub fn new<F, O, R>(method: Method, route: &str, mime: &str, call: F) -> Self
+    pub fn new<F, I, O, R>(method: Method, route: &str, redirects: I, mime: &str, call: F) -> Self
     where
         F: Fn(R) -> O + Send + Sync + 'static,
         O: Future<Output = Vec<u8>> + Send + 'static,
         R: From<Request>,
+        I: IntoRoutes,
     {
         Self {
             method,
             route: route.into(),
+            redirects: redirects.into_routes(),
             mime: mime.parse().ok(),
             service: Box::new(move |req: Request| {
                 let input: R = req.into();
@@ -54,5 +57,12 @@ impl Service {
 
     pub fn mime(&self) -> Option<&Mime> {
         self.mime.as_ref()
+    }
+
+    pub fn redirects_to(&self, route: &str) -> bool {
+        self.redirects
+            .iter()
+            .find(|r| r.as_str() == route)
+            .is_some()
     }
 }

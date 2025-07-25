@@ -34,11 +34,7 @@ impl Serialize for Response {
 impl Response {
     pub async fn new(mut req: Request, server: &Server) -> Result<Self, PheasantError> {
         // if None then 404 not found
-        let service = server.borrow_service(req.method(), req.route());
-        if service.is_none() {
-            return Err(PheasantError::ClientError(ClientError::NotFound));
-        }
-        let service = service.unwrap();
+        let (status, service) = server.service_status(req.method(), req.route())?;
 
         let proto = req.proto();
         let mime = mime(&req, &service);

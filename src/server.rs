@@ -5,7 +5,10 @@ use mime::Mime;
 use serde::Serialize;
 use url::Url;
 
-use super::{Method, PheasantError, Request, Response, Route, Service};
+use super::{
+    ClientError, Method, PassingStatus, PheasantError, Redirection, Request, Response, Route,
+    Service, Successful,
+};
 
 pub fn base_url() -> Url {
     Url::parse("http://127.0.0.1:8883").unwrap()
@@ -37,14 +40,16 @@ pub struct Server {
     socket: TcpListener,
     /// container for the server services
     services: Vec<Service>,
+    // user defined, universal(all requests) request header fields' length upper binding
+    // header_limits: HashMap<String, usize>,
 }
 
 impl Server {
     /// creates a new server
     /// ```
     /// let (addr, port) = ([127.0.0.1], 8883);
-    /// let max = 90000;
-    /// let server = Server::new(max, addr, port)
+    /// let workers = 90000;
+    /// let server = Server::new(workers, addr, port)
     /// ```
     pub fn new(addr: impl Into<Ipv4Addr>, port: u16, max: usize) -> Result<Self, PheasantError> {
         Ok(Self {
@@ -61,6 +66,7 @@ impl Server {
             services: vec![Service::new(
                 Method::Get,
                 "/not_found404.html",
+                [],
                 "text/html",
                 not_found404,
             )],
@@ -74,6 +80,8 @@ impl Server {
     {
         self.services.push(s());
     }
+
+    // pub fn limit_header(&mut self, h: &str, limit: usize, methods: &[Method], routes: &[Route]) {}
 }
 
 // impl<F, O, R> From<(Method, &str, &str, F)> for Service
@@ -101,10 +109,24 @@ impl Server {
 // }
 
 impl Server {
-    pub fn borrow_service(&self, method: Method, route: &str) -> Option<&Service> {
-        self.services
+    pub fn service_status(
+        &self,
+        method: Method,
+        route: &str,
+    ) -> Result<(PassingStatus, &Service), PheasantError> {
+        let service = self
+            .services
             .iter()
-            .find(move |s| s.method() == method && s.route() == route)
+            .find(move |s| s.method() == method && (s.route() == route || s.redirects_to(&route)));
+
+        match service {
+            Some(s) if s.route() == route => Ok((PassingStatus::Successful(Successful::OK), s)),
+            Some(s) if s.redirects_to(&route) => {
+                Ok((PassingStatus::Redirection(Redirection::SeeOther), s))
+            }
+            None => Err(PheasantError::ClientError(ClientError::NotFound)),
+            Some(_) => unreachable!("filtered out arm not reachable"),
+        }
     }
 
     pub fn fallback_service(&self) -> &Service {

@@ -6,7 +6,7 @@ async fn main() {
     let mut phe = Server::new([127, 0, 0, 1], 8883, 3333).unwrap();
     phe.service(hello);
     phe.service(favicon);
-    phe.service(|| Service::new(Method::Get, "/icon", "image/svg+xml", svg));
+    phe.service(|| Service::new(Method::Get, "/icon", [], "image/svg+xml", svg));
     phe.serve().await;
 }
 

@@ -18,6 +18,8 @@ pub use status_codes::{
     ClientError, Informational, PassingStatus, Redirection, ResponseStatus, ServerError, Successful,
 };
 
+pub use pheasant_macro_get::get;
+
 #[derive(Debug)]
 pub enum PheasantError {
     ClientError(ClientError),
@@ -79,6 +81,80 @@ impl From<url::ParseError> for PheasantError {
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct Route(String);
 
+impl Route {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+pub trait IntoRoutes {
+    fn into_routes(self) -> Vec<Route>;
+}
+
+// impl<T> IntoRoutes for T
+// where
+//     T: IntoIterator<Item = str>,
+// {
+//     fn into_routes(self) -> Vec<Route> {
+//         t.into_iter().map(|r| r.into().collect())
+//     }
+// }
+
+macro_rules! impl_into_routes {
+    ($($t: ty),*) => {
+        $(
+            impl IntoRoutes for $t {
+                fn into_routes(self) -> Vec<Route> {
+                    self.into_iter().map(|r| (*r).into()).collect()
+                }
+            }
+        )*
+    };
+}
+
+impl_into_routes!(&[&str], Vec<&str>);
+
+impl_into_routes!(
+    [&str; 0], [&str; 1], [&str; 2], [&str; 3], [&str; 4], [&str; 5], [&str; 6], [&str; 7],
+    [&str; 8], [&str; 9], [&str; 10], [&str; 11], [&str; 12]
+);
+
+impl<T> IntoRoutes for Option<T>
+where
+    T: IntoRoutes,
+{
+    fn into_routes(self) -> Vec<Route> {
+        let Some(t) = self else {
+            return vec![];
+        };
+
+        t.into_routes()
+    }
+}
+
+impl<'a> IntoRoutes for &'a str {
+    fn into_routes(self: &'a str) -> Vec<Route> {
+        vec![self.into()]
+    }
+}
+
+impl IntoRoutes for String {
+    fn into_routes(self: String) -> Vec<Route> {
+        vec![self.into()]
+    }
+}
+
+impl From<String> for Route {
+    fn from(s: String) -> Self {
+        let s = if !s.starts_with('/') {
+            format!("/{}", s)
+        } else {
+            s
+        };
+
+        Self(s)
+    }
+}
 impl From<&str> for Route {
     fn from(s: &str) -> Self {
         let s = if !s.starts_with('/') {

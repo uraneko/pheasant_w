@@ -232,6 +232,8 @@ fn read_parse_headers(
                 }
                 name.push(b as char);
             }
+            // skip whitespace
+            _ = hf.next();
             let mut val = String::new();
             while let Some(b) = hf.next()
                 && ![13, 10].contains(&b)
