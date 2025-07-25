@@ -57,6 +57,10 @@ impl Request {
         &self.route.0
     }
 
+    pub fn take_route(&mut self) -> String {
+        std::mem::take(&mut self.route).0
+    }
+
     pub fn query(&mut self) -> Option<&HashMap<String, String>> {
         self.query.as_ref()
     }

@@ -5,8 +5,8 @@ use mime::Mime;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::{
-    ClientError, PassingStatus, PheasantError, Protocol, Request, ResponseStatus, Route, Server,
-    ServerError, Service, Successful,
+    ClientError, PassingStatus, PheasantError, Protocol, Redirection, Request, ResponseStatus,
+    Route, Server, ServerError, Service, Successful,
 };
 
 const SERVER: &str = "Pheasant-DevServer / 0.1.0";
@@ -35,32 +35,32 @@ impl Response {
     pub async fn new(mut req: Request, server: &Server) -> Result<Self, PheasantError> {
         // if None then 404 not found
         let (status, service) = server.service_status(req.method(), req.route())?;
-
         let proto = req.proto();
-        let mime = mime(&req, &service);
-        let mut headers = req.headers();
-        headers.clear();
 
-        let body = (service.service())(req).await;
-        let body = deflate::deflate_bytes(&body);
-        let body = deflate::deflate_bytes_gzip(&body);
-        let len = body.len();
+        let (headers, body) = match status {
+            PassingStatus::Successful(Successful::OK) => {
+                let (h, b) = successful(req, service).await;
 
-        headers.insert("Content-Encoding".into(), "deflate, gzip".into());
-        headers.insert("Content-Type".into(), mime.to_string());
-        headers.insert("Content-Length".into(), format!("{}", len));
-        headers.insert("Date".into(), Utc::now().to_string());
-        headers.insert("Server".into(), SERVER.into());
+                (h, Some(b))
+            }
+            PassingStatus::Redirection(Redirection::SeeOther) => {
+                let h = redirection(req, service).await;
+
+                (h, None)
+            }
+            _ => unimplemented!("other status codes are not yet implemented; {}", file!()),
+        };
 
         Ok(Self {
             headers,
             proto,
-            body: if body.is_empty() { None } else { Some(body) },
-            status: PassingStatus::Successful(Successful::OK),
+            body,
+            status,
         })
     }
 
     pub fn respond(self) -> Vec<u8> {
+        println!("{:#?}", self);
         // serde_json::to_string(&self).unwrap().into_bytes()
         let mut payload = format!(
             "{} {} {}\n",
@@ -92,6 +92,42 @@ fn mime(req: &Request, service: &Service) -> Mime {
         .unwrap_or(fallback.clone())
 }
 
-fn is_alerady_compressed(mime: &Mime) -> bool {
+fn is_already_compressed(mime: &Mime) -> bool {
     todo!()
+}
+
+pub async fn successful(mut req: Request, service: &Service) -> (HashMap<String, String>, Vec<u8>) {
+    let mime = mime(&req, &service);
+
+    let mut headers = req.headers();
+    headers.clear();
+
+    let body = (service.service())(req).await;
+    let body = deflate::deflate_bytes(&body);
+    let body = deflate::deflate_bytes_gzip(&body);
+    let len = body.len();
+
+    // these are success headers
+    headers.insert("Content-Encoding".into(), "deflate, gzip".into());
+    headers.insert("Content-Type".into(), mime.to_string());
+    headers.insert("Content-Length".into(), format!("{}", len));
+    headers.insert("Date".into(), Utc::now().to_string());
+    // add server.name/version field
+    headers.insert("Server".into(), SERVER.into());
+
+    (headers, body)
+}
+
+pub async fn redirection(mut req: Request, service: &Service) -> HashMap<String, String> {
+    let mime = mime(&req, &service);
+    let route = service.route().into();
+
+    let mut headers = req.headers();
+    headers.clear();
+
+    headers.insert("Location".into(), route);
+    headers.insert("Content-Type".into(), mime.to_string());
+    headers.insert("Content-Length".into(), String::from("0"));
+
+    headers
 }

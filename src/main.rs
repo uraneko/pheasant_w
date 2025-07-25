@@ -29,6 +29,8 @@ async fn hello(who: Who) -> Vec<u8> {
 }
 
 #[get("favicon.ico")]
+#[re("bad")]
+#[mime("image/svg+xml")]
 async fn favicon(_: ()) -> Vec<u8> {
     std::fs::read_to_string("assets/404.svg")
         .unwrap()
