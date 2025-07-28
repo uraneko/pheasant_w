@@ -113,6 +113,8 @@ impl Response {
     }
 }
 
+// TODO handle OPTIONS request
+
 impl HeaderMap for Response {
     fn header<H: Header>(&self, key: &str) -> Option<H>
     where

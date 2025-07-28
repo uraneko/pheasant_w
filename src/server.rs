@@ -34,7 +34,7 @@ impl Server {
             socket: {
                 let addr = addr.into();
                 println!(
-                    "\x1b[1;38;2;41;213;244mServer bound at http://{}:{}\x1b[0m",
+                    "\x1b[1;38;2;237;203;244mServer bound at http://{}:{}\x1b[0m",
                     addr, port
                 );
 
