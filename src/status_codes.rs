@@ -1,5 +1,6 @@
 use crate::PheasantError;
 
+/// http response server error status
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ServerError {
@@ -16,6 +17,7 @@ pub enum ServerError {
     NetworkAuthenticationRequired = 511,
 }
 
+/// http response client error status
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ClientError {
@@ -51,6 +53,7 @@ pub enum ClientError {
     UnavailableForLegalReasons = 451,
 }
 
+/// http response redirection status
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Redirection {
@@ -73,6 +76,7 @@ pub enum Redirection {
     MultipleChoices = 300,
 }
 
+/// http response successful status
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Successful {
@@ -88,6 +92,7 @@ pub enum Successful {
     OK = 200,
 }
 
+/// http response informational status
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Informational {
@@ -97,6 +102,7 @@ pub enum Informational {
     Continue = 100,
 }
 
+/// enum wrapping all response statuses
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Status {
     Informational(Informational),
@@ -116,9 +122,12 @@ impl From<PheasantError> for Status {
     }
 }
 
+/// implements shared behavior amongst response statuses
 pub trait ResponseStatus {
+    /// returns the status text value
     fn text(&self) -> &str;
 
+    /// returns the status code number
     fn code(&self) -> u16;
 }
 

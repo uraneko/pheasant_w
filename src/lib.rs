@@ -13,7 +13,7 @@ pub mod server;
 pub mod service;
 pub mod status_codes;
 
-pub use requests::{Protocol, Request};
+pub use requests::Request;
 pub use response::Response;
 pub use server::Server;
 pub use service::Service;
@@ -25,6 +25,7 @@ pub use pheasant_macro_get::get;
 
 pub type PheasantResult<T> = Result<T, PheasantError>;
 
+/// crate's main error type
 #[derive(Debug)]
 pub enum PheasantError {
     ClientError(ClientError),
@@ -39,6 +40,7 @@ impl std::fmt::Display for PheasantError {
 
 impl std::error::Error for PheasantError {}
 
+// WARN this is senseless, should be PortIsTaken error variant
 impl From<std::io::Error> for PheasantError {
     fn from(_err: std::io::Error) -> Self {
         Self::ClientError(ClientError::BadRequest)
@@ -69,6 +71,8 @@ impl From<url::ParseError> for PheasantError {
     }
 }
 
+/// uri route type,
+/// e.g., "/index.html"
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct Route(String);
 
@@ -78,7 +82,9 @@ impl Route {
     }
 }
 
+/// used for service redirections generations
 pub trait IntoRoutes {
+    /// consumes self and returns the routes
     fn into_routes(self) -> Vec<Route>;
 }
 
@@ -91,6 +97,7 @@ pub trait IntoRoutes {
 //     }
 // }
 
+// impl IntoRoutes for T: IntoIterator<Item = &str>
 macro_rules! impl_into_routes {
     ($($t: ty),*) => {
         $(
@@ -146,6 +153,7 @@ impl From<String> for Route {
         Self(s)
     }
 }
+
 impl From<&str> for Route {
     fn from(s: &str) -> Self {
         let s = if !s.starts_with('/') {
@@ -158,6 +166,8 @@ impl From<&str> for Route {
     }
 }
 
+/// HTTP Method enum
+/// only Get method is somewhat supported at the moment
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Method {
     Head,
@@ -210,13 +220,26 @@ impl TryFrom<&str> for Method {
     }
 }
 
+/// HTTP header conversion from/to String
 pub trait Header: std::fmt::Display + std::str::FromStr {}
 
+/// read and write headers of a request/response
 pub trait HeaderMap {
+    /// get a header value from a request/response
+    ///
+    /// ```
+    /// let mime: Mime = req.header("Content-Type");
+    /// ```
     fn header<H: Header>(&self, key: &str) -> Option<H>
     where
         <H as std::str::FromStr>::Err: std::fmt::Debug;
 
+    /// set a header value for a request/response
+    ///
+    /// ```
+    /// let len = content.len();
+    /// let maybe_old: Option<usize> = response.set_header("Content-Length", len);
+    /// ```
     fn set_header<H: Header>(&mut self, key: &str, h: H) -> Option<String>;
 }
 
@@ -234,5 +257,55 @@ impl HeaderMap for HashMap<String, String> {
 
     fn set_header<H: Header>(&mut self, key: &str, h: H) -> Option<String> {
         self.insert(key.into(), h.to_string())
+    }
+}
+
+/// Http protocol version
+///
+/// currently only http 1.1 is supported
+#[non_exhaustive]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Protocol {
+    #[default]
+    HTTP1_1,
+}
+
+impl std::fmt::Display for Protocol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::HTTP1_1 => "HTTP/1.1",
+            }
+        )
+    }
+}
+
+impl TryFrom<&[u8]> for Protocol {
+    type Error = PheasantError;
+
+    fn try_from(v: &[u8]) -> Result<Self, Self::Error> {
+        match v {
+            b"HTTP/1.1" => Ok(Self::HTTP1_1),
+            b"HTTP/2" | b"HTTP/3" => Err(Self::Error::ServerError(
+                ServerError::HTTPVersionNotSupported,
+            )),
+            _ => Err(Self::Error::ClientError(ClientError::BadRequest)),
+        }
+    }
+}
+
+impl TryFrom<&str> for Protocol {
+    type Error = PheasantError;
+
+    fn try_from(v: &str) -> Result<Self, Self::Error> {
+        match v {
+            "HTTP/1.1" => Ok(Self::HTTP1_1),
+            "HTTP/2" | "HTTP/3" => Err(Self::Error::ServerError(
+                ServerError::HTTPVersionNotSupported,
+            )),
+            _ => Err(Self::Error::ClientError(ClientError::BadRequest)),
+        }
     }
 }

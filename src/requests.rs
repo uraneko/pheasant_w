@@ -3,10 +3,11 @@ use std::io::{BufRead, BufReader, Read};
 use std::net::TcpStream;
 
 use super::{
-    ClientError, Header, HeaderMap, Method, PheasantError, PheasantResult, Route, ServerError,
+    ClientError, Header, HeaderMap, Method, PheasantError, PheasantResult, Protocol, Route,
 };
-use crate::server::join_path;
 
+/// HTTP Request type
+/// used in services to generate service input type; R: From<Request>
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Request {
     method: Method,
@@ -18,7 +19,12 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn from_stream(stream: &mut TcpStream) -> PheasantResult<Self> {
+    /// parse the tcp stream request bytes into a http Request instance
+    ///
+    /// ### Error
+    ///
+    /// returns a `PheasantError` in case of a bad request
+    pub(crate) fn from_stream(stream: &mut TcpStream) -> PheasantResult<Self> {
         let mut v = vec![];
         let mut reader = BufReader::new(stream);
         // if error we return 400 bad request
@@ -49,26 +55,36 @@ impl Request {
         })
     }
 
+    /// returns a copy of this request's http Method
     pub fn method(&self) -> Method {
         self.method
     }
 
+    /// returns a reference `&str` of this request's route value
     pub fn route(&self) -> &str {
         &self.route.0
     }
 
+    /// returns this request's route value String
+    /// doesn't clone, uses std::mem::take
+    /// Note that the original request route value becomes String::new() once this is used
     pub fn take_route(&mut self) -> String {
         std::mem::take(&mut self.route).0
     }
 
+    /// if the request has a query, this returns a reference to it,
+    /// otherwise, returns `None`
     pub fn query(&mut self) -> Option<&HashMap<String, String>> {
         self.query.as_ref()
     }
 
-    pub fn query_contains(&self) -> bool {
+    /// checks if this request has a query
+    pub fn has_query(&self) -> bool {
         self.query.is_some()
     }
 
+    /// returns a reference to the param in the request query if both exist
+    /// Otherwise, returns `None`
     pub fn param(&self, key: &str) -> Option<&str> {
         let Some(ref map) = self.query else {
             return None;
@@ -105,7 +121,21 @@ impl Request {
     //         .collect()
     // }
 
-    pub fn header<H: Header>(&self, key: &str) -> Option<H>
+    /// returns a copy of this request's protocol
+    pub fn proto(&self) -> Protocol {
+        self.proto
+    }
+
+    /// takes this request's headers map and returns them
+    ///
+    /// once this is used, self.headers becomes an empty `HashMap`
+    pub fn headers(&mut self) -> HashMap<String, String> {
+        std::mem::take(&mut self.headers)
+    }
+}
+
+impl HeaderMap for Request {
+    fn header<H: Header>(&self, key: &str) -> Option<H>
     where
         <H as std::str::FromStr>::Err: std::fmt::Debug,
     {
@@ -113,59 +143,8 @@ impl Request {
         self.headers.get(key).map(|s| s.parse::<H>().unwrap())
     }
 
-    pub fn proto(&self) -> Protocol {
-        self.proto
-    }
-
-    pub fn headers(&mut self) -> HashMap<String, String> {
-        std::mem::take(&mut self.headers)
-    }
-}
-
-#[non_exhaustive]
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Protocol {
-    #[default]
-    HTTP1_1,
-}
-
-impl std::fmt::Display for Protocol {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::HTTP1_1 => "HTTP/1.1",
-            }
-        )
-    }
-}
-
-impl TryFrom<&[u8]> for Protocol {
-    type Error = PheasantError;
-
-    fn try_from(v: &[u8]) -> Result<Self, Self::Error> {
-        match v {
-            b"HTTP/1.1" => Ok(Self::HTTP1_1),
-            b"HTTP/2" | b"HTTP/3" => Err(Self::Error::ServerError(
-                ServerError::HTTPVersionNotSupported,
-            )),
-            _ => Err(Self::Error::ClientError(ClientError::BadRequest)),
-        }
-    }
-}
-
-impl TryFrom<&str> for Protocol {
-    type Error = PheasantError;
-
-    fn try_from(v: &str) -> Result<Self, Self::Error> {
-        match v {
-            "HTTP/1.1" => Ok(Self::HTTP1_1),
-            "HTTP/2" | "HTTP/3" => Err(Self::Error::ServerError(
-                ServerError::HTTPVersionNotSupported,
-            )),
-            _ => Err(Self::Error::ClientError(ClientError::BadRequest)),
-        }
+    fn set_header<H: Header>(&mut self, key: &str, h: H) -> Option<String> {
+        self.headers.set_header(key, h)
     }
 }
 

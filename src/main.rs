@@ -1,5 +1,4 @@
-use pheasant_core::{Method, Request, Server, Service};
-use pheasant_macro_get::get;
+use pheasant_core::{Method, Request, Server, Service, get};
 
 #[tokio::main]
 async fn main() {

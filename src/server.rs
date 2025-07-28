@@ -10,66 +10,42 @@ use super::{
     Service, Status, Successful,
 };
 
-pub fn base_url() -> Url {
-    Url::parse("http://127.0.0.1:8883").unwrap()
-}
-
-pub fn join_path(path: &str) -> Url {
-    if path.starts_with("http://127.0.0.1:8883") {
-        return Url::parse(path).unwrap();
-    }
-
-    base_url().join(path).unwrap()
-}
-
-// pub fn into_bytes<S: Serialize>(s: S) -> Vec<u8> {
-//     if let Ok(mut res) = serde_json::to_string(&s) {
-//         res.remove(0);
-//         res.pop();
-//         res = res.replacen("\\\"", "\"", res.len());
-//         res = res.replacen("\\n", "", res.len());
-//
-//         return res.into();
-//     } else {
-//         vec![]
-//     }
-// }
-
+/// the http server type
 pub struct Server {
     /// the server tcp listener socket
     socket: TcpListener,
     /// container for the server services
     services: Vec<Service>,
-    // user defined, universal(all requests) request header fields' length upper binding
-    // header_limits: HashMap<String, usize>,
 }
 
 impl Server {
     /// creates a new server
+    ///
     /// ```
     /// let (addr, port) = ([127.0.0.1], 8883);
     /// let workers = 90000;
     /// let server = Server::new(workers, addr, port)
     /// ```
+    ///
+    /// ### Error
+    ///
     pub fn new(addr: impl Into<Ipv4Addr>, port: u16, max: usize) -> PheasantResult<Self> {
         Ok(Self {
             socket: {
                 let addr = addr.into();
                 println!(
-                    "\x1b[1;38;2;213;183;214mServer bound at http://{}:{}\x1b[0m",
+                    "\x1b[1;38;2;41;213;244mServer bound at http://{}:{}\x1b[0m",
                     addr, port
                 );
 
                 // `impl From<io::Error> for PheasantError` is for this
+                // TODO when this errors out
+                // we append the port number and try again
+                // until we get a free port
+                // TODO remove impl From<io::Error> for PheasantError
                 TcpListener::bind((addr, port))?
             },
-            services: vec![Service::new(
-                Method::Get,
-                "/not_found404.html",
-                [],
-                "text/html",
-                not_found404,
-            )],
+            services: vec![],
         })
     }
 
@@ -80,36 +56,14 @@ impl Server {
     {
         self.services.push(s());
     }
-
-    // pub fn limit_header(&mut self, h: &str, limit: usize, methods: &[Method], routes: &[Route]) {}
 }
 
-// impl<F, O, R> From<(Method, &str, &str, F)> for Service
-// where
-//     F: Fn(R) -> O + Send + Sync + 'static,
-//     O: Future<Output = Vec<u8>> + Send + 'static,
-//     R: From<Request>,
-// {
-//     fn from(s: (Method, &str, &str, F)) -> Self {
-//         Service::new(s.0, s.1, s.2, s.3)
-//     }
-// }
-
-// impl<F, O, R, W> From<W> for Service
-// where
-//     F: Fn(R) -> O + Send + Sync + 'static,
-//     O: Future<Output = Vec<u8>> + Send + 'static,
-//     R: From<Request>,
-//     W: Fn() -> (Method, Route, Option<Mime>, F),
-// {
-//     fn from(s: W) -> Self {
-//         let s = s();
-//         Service::from_wrapper(s.0, s.1, s.2, s.3)
-//     }
-// }
-
 impl Server {
-    /// returns the requested service if any with an http status code
+    /// searches for the specified service
+    /// returns `(Status, &Service)`
+    ///
+    /// ### Error
+    /// returns an Err, a client error if the service is not found
     pub fn service_status(
         &self,
         method: Method,
@@ -130,10 +84,9 @@ impl Server {
         }
     }
 
-    pub fn fallback_service(&self) -> &Service {
-        &self.services[0]
-    }
-
+    /// launch the service
+    /// listening for incoming tcp streams
+    /// and handling them
     pub async fn serve(&mut self) {
         for stream in self.socket.incoming().flatten() {
             if let Err(e) = self.handle_stream(stream).await {
@@ -143,18 +96,16 @@ impl Server {
         }
     }
 
+    // handles a tcp stream connection
     async fn handle_stream(&self, mut stream: TcpStream) -> PheasantResult<TcpStream> {
         let req = Request::from_stream(&mut stream);
         println!("{:#?}", req);
 
         let resp = Response::new(req, &self).await;
         let payload = resp.respond();
-        // println!("{}", str::from_utf8(&payload).unwrap());
 
         stream.write_all(&payload)?;
-        // println!("wrote to client; {:?}", stream.take_error());
         stream.flush()?;
-        // println!("flushed buffer; {:?}", stream.take_error());
 
         Ok(stream)
     }
@@ -194,20 +145,8 @@ impl Server {
 //     res
 // }
 
-// rn can do services, also can easily add file
-// but what about database handling
-
 impl From<Request> for () {
     fn from(_p: Request) -> () {
         ()
     }
-}
-
-const NOT_FOUND_SVG: &str = include_str!("../assets/404.svg");
-const NOT_FOUND_HTML: &str = include_str!("../templates/404.html");
-
-async fn not_found404(_: ()) -> Vec<u8> {
-    NOT_FOUND_HTML
-        .replace("{404.svg}", NOT_FOUND_SVG)
-        .into_bytes()
 }
