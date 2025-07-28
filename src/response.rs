@@ -5,8 +5,8 @@ use mime::Mime;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::{
-    ClientError, PheasantError, PheasantResult, Protocol, Redirection, Request, ResponseStatus,
-    Route, Server, ServerError, Service, Status, Successful,
+    ClientError, Header, HeaderMap, PheasantError, PheasantResult, Protocol, Redirection, Request,
+    ResponseStatus, Server, ServerError, Service, Status, Successful,
 };
 
 const SERVER: &str = "Pheasant (dev/0.1.0)";
@@ -32,7 +32,7 @@ impl Serialize for Response {
 }
 
 impl Response {
-    pub async fn new(mut req: PheasantResult<Request>, server: &Server) -> Self {
+    pub async fn new(req: PheasantResult<Request>, server: &Server) -> Self {
         if let Err(err) = req {
             return Self::from_err(err).await;
         }
@@ -106,6 +106,17 @@ impl Response {
         }
 
         payload
+    }
+
+    fn header<H: Header>(&self, key: &str) -> Option<H>
+    where
+        <H as std::str::FromStr>::Err: std::fmt::Debug,
+    {
+        self.headers.header(key)
+    }
+
+    fn set_header<H: Header>(&mut self, key: &str, h: H) -> Option<String> {
+        self.headers.set_header(key, h)
     }
 }
 

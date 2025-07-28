@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
 use std::net::TcpStream;
 
-use mime::Mime;
-
-use super::{ClientError, Method, PheasantError, PheasantResult, Route, ServerError};
+use super::{
+    ClientError, Header, HeaderMap, Method, PheasantError, PheasantResult, Route, ServerError,
+};
 use crate::server::join_path;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -260,30 +260,11 @@ fn read_body(v: &mut Vec<u8>, s: &mut BufReader<&mut TcpStream>, len: usize) -> 
     Ok(())
 }
 
-pub trait Header: std::str::FromStr {}
-
-impl Header for usize {}
-impl Header for Mime {}
-
-trait MapHeader {
-    fn header<H: Header>(&self, key: &str) -> Option<H>
-    where
-        <H as std::str::FromStr>::Err: std::fmt::Debug;
-}
-
-impl MapHeader for HashMap<String, String> {
-    fn header<H: Header>(&self, key: &str) -> Option<H>
-    where
-        <H as std::str::FromStr>::Err: std::fmt::Debug,
-    {
-        // TODO handle the error
-        self.get(key).map(|s| s.parse::<H>().unwrap())
-    }
-}
-
 fn parse_query(query: &str) -> HashMap<String, String> {
     query
         .split('&')
+        // BUG this crashes the server when uri query is badly formatted
+        // TODO scan query after getting request and return ClientError::BadRequest if query is faulty
         .map(|e| -> [&str; 2] { e.splitn(2, '=').collect::<Vec<&str>>().try_into().unwrap() })
         .map(|s| (s[0].to_string(), s[1].to_string()))
         .collect()

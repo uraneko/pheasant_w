@@ -1,8 +1,11 @@
 // #![allow(unused_imports)]
 // #![allow(dead_code)]
 // #![allow(unused_variables)]
+use std::collections::HashMap;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
+
+use mime::Mime;
 
 pub mod requests;
 pub mod response;
@@ -204,5 +207,32 @@ impl TryFrom<&str> for Method {
             "TRACE" => Ok(Self::Trace),
             _ => Err(Self::Error::ClientError(ClientError::BadRequest)),
         }
+    }
+}
+
+pub trait Header: std::fmt::Display + std::str::FromStr {}
+
+pub trait HeaderMap {
+    fn header<H: Header>(&self, key: &str) -> Option<H>
+    where
+        <H as std::str::FromStr>::Err: std::fmt::Debug;
+
+    fn set_header<H: Header>(&mut self, key: &str, h: H) -> Option<String>;
+}
+
+impl Header for usize {}
+impl Header for Mime {}
+
+impl HeaderMap for HashMap<String, String> {
+    fn header<H: Header>(&self, key: &str) -> Option<H>
+    where
+        <H as std::str::FromStr>::Err: std::fmt::Debug,
+    {
+        // TODO handle the error
+        self.get(key).map(|s| s.parse::<H>().unwrap())
+    }
+
+    fn set_header<H: Header>(&mut self, key: &str, h: H) -> Option<String> {
+        self.insert(key.into(), h.to_string())
     }
 }
