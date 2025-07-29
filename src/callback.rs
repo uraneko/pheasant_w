@@ -21,6 +21,8 @@ pub fn wrapper_fn(
     suffix_ident(&mut fun);
     let suffixed = fn_ident(&fun);
 
+    let vis = &fun.vis;
+
     let mime = if let Some(mime) = mime {
         quote! { #mime }
     } else {
@@ -36,7 +38,7 @@ pub fn wrapper_fn(
     quote! {
         #fun
 
-        fn #ident() -> pheasant_core::Service {
+        #vis fn #ident() -> pheasant_core::Service {
             pheasant_core::Service::new(pheasant_core::Method::Get, #route, #re, #mime, #suffixed)
         }
     }
