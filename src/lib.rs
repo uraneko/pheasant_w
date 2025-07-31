@@ -24,10 +24,10 @@ pub fn get(attr: TokenStream, fun: TokenStream) -> TokenStream {
     let mime = mime(&mut fun);
     let re = re(&mut fun);
 
-    let wra_fun = generate_service(resou.route(), re, mime, fun);
+    let funs = generate_service(resou.route(), re, mime, fun);
 
     quote! {
-        #wra_fun
+        #funs
     }
     .into()
 }
