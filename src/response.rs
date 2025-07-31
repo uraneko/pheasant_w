@@ -37,7 +37,7 @@ impl StatusState {
 }
 
 /// Http Response type
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Response {
     proto: Protocol,
     body: Option<Vec<u8>>,
@@ -83,12 +83,17 @@ impl Response {
         let mime = mime(&req, service);
 
         let mut resp = (service.service())(req).await;
+        let mime = if resp.has_header::<Mime>("Content-Type") {
+            None
+        } else {
+            Some(mime)
+        };
         resp.update_status(status, mime, service.route());
 
         resp
     }
 
-    pub fn update_status(&mut self, status: Status, mime: Mime, route: &str) {
+    pub fn update_status(&mut self, status: Status, mime: Option<Mime>, route: &str) {
         match status {
             Status::Informational(i) => (),
             Status::Successful(s) => self.successful(mime),
@@ -107,7 +112,7 @@ impl Response {
         self.proto = proto;
     }
 
-    fn successful(&mut self, mime: Mime) {
+    fn successful(&mut self, mime: Option<Mime>) {
         if let Some(ref mut body) = self.body {
             *body = deflate::deflate_bytes(&body);
             *body = deflate::deflate_bytes_gzip(&body);
@@ -115,7 +120,9 @@ impl Response {
 
             self.set_header::<String>("Content-Encoding".into(), "deflate, gzip".into());
             self.set_header("Content-Length".into(), len);
-            self.set_header("Content-Type", mime);
+            if let Some(mime) = mime {
+                self.set_header("Content-Type", mime);
+            }
             self.set_header("Date".into(), Utc::now());
             self.set_header::<String>("Server".into(), SERVER.into());
         }
@@ -303,5 +310,4 @@ async fn http_version_not_supported() -> (HashMap<String, String>, Vec<u8>) {
 }
 
 impl Header for chrono::DateTime<Utc> {}
-
 impl Header for String {}

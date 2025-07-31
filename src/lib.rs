@@ -241,6 +241,13 @@ pub trait HeaderMap {
     /// let maybe_old: Option<usize> = response.set_header("Content-Length", len);
     /// ```
     fn set_header<H: Header>(&mut self, key: &str, h: H) -> Option<String>;
+
+    fn has_header<H: Header>(&self, key: &str) -> bool
+    where
+        <H as std::str::FromStr>::Err: std::fmt::Debug,
+    {
+        self.header::<H>(key).is_some()
+    }
 }
 
 impl Header for usize {}
