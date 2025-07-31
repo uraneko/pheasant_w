@@ -1,45 +1,148 @@
 use proc_macro2::{Span, TokenStream as TS2};
 use quote::quote;
-use syn::{Ident, ItemFn};
+use syn::{FnArg, Ident, ItemFn, PatType, Type};
 
-fn fn_ident(fun: &ItemFn) -> Ident {
+// suffixes an ident with the passed &str value
+fn suffix_fn_ident(fun: &mut ItemFn, suffix: &str) {
+    let i = fun.sig.ident.to_string();
+    fun.sig.ident = Ident::new(&(i + suffix), Span::call_site());
+}
+
+fn suffix_ident(i: &Ident, suffix: &str) -> Ident {
+    Ident::new(&(i.to_string() + suffix), Span::call_site())
+}
+
+fn clone_ident(fun: &ItemFn) -> Ident {
     fun.sig.ident.clone()
 }
 
-fn suffix_ident(fun: &mut ItemFn) {
-    let i = fun.sig.ident.to_string();
-    fun.sig.ident = Ident::new(&(i + "_service"), Span::call_site());
+fn ref_ident(fun: &ItemFn) -> &Ident {
+    &fun.sig.ident
 }
 
-pub fn wrapper_fn(
-    route: String,
-    re: Option<Vec<String>>,
-    mime: Option<String>,
-    mut fun: ItemFn,
-) -> TS2 {
-    let ident = fn_ident(&fun);
-    suffix_ident(&mut fun);
-    let suffixed = fn_ident(&fun);
-
-    let vis = &fun.vis;
-
-    let mime = if let Some(mime) = mime {
+fn gen_mime(mime: Option<String>) -> TS2 {
+    if let Some(mime) = mime {
         quote! { #mime }
     } else {
         quote! { "" }
-    };
+    }
+}
 
-    let re = if let Some(re) = re {
+fn gen_re(re: Option<Vec<String>>) -> TS2 {
+    if let Some(re) = re {
         quote! { [#(#re,)*] }
     } else {
         quote! { [] }
+    }
+}
+
+fn gen_arg_ty(fun: &ItemFn) -> &Type {
+    let inputs = &fun.sig.inputs;
+
+    let FnArg::Typed(PatType { ty, .. }) = inputs.first().unwrap() else {
+        panic!("bad sigature, this fn can't take self, provide a type T: From<Request> instead");
     };
 
+    ty
+}
+
+pub fn generate_service(
+    route: String,
+    re: Option<Vec<String>>,
+    mime: Option<String>,
+    fun: ItemFn,
+) -> TS2 {
+    // let vis = &fun.vis;
+    // let mime = gen_mime(mime);
+    // let re = gen_re(re);
+
+    let is_response = {
+        let ty = &fun.sig.output;
+        println!("{}", quote! { #ty });
+
+        quote! { #ty }.to_string() == "-> Response"
+    };
+
+    if is_response {
+        generate_service_from_responder(route, re, fun)
+    } else {
+        generate_service_from_data_func(route, mime, re, fun)
+    }
+}
+
+fn generate_service_from_data_func(
+    route: String,
+    mime: Option<String>,
+    re: Option<Vec<String>>,
+    mut fun: ItemFn,
+) -> TS2 {
+    // the func that returns Service
+    let service_fun = clone_ident(&fun);
+    // the func that wraps the user defined service fn (-> Vec<u8>) into a fn (-> Response)
+    let respond_fun = suffix_ident(&service_fun, "_service");
+    // suffix user defined fn
+    suffix_fn_ident(&mut fun, "_respond");
+    let user_fun = ref_ident(&fun);
+
+    let vis = &fun.vis;
+    let mime = gen_mime(mime);
+    let re = gen_re(re);
+    let arg = gen_arg_ty(&fun);
+
+    // this block of code is only called when
+    // user defined service returns Vec<u8>
+    // need to add a wrapper fn that returns response
     quote! {
         #fun
 
-        #vis fn #ident() -> pheasant_core::Service {
-            pheasant_core::Service::new(pheasant_core::Method::Get, #route, #re, #mime, #suffixed)
+        // NOTE this here is the new suffixed
+        // i.e., the original service function itself should be modified
+        // to return a Response template
+        #vis async fn #respond_fun(i: #arg, p: Protocol) -> Response {
+            let resp = Response::template(p);
+            // resp.header::<Mime>("Content-Type", "text/html");
+            let data = #user_fun(i).await;
+            resp.body = Some(data);
+            // resp.status = StatusState::default() // set by ::template()
+
+            resp
+        }
+
+        #vis fn #service_fun() -> pheasant_core::Service {
+            pheasant_core::Service::new(
+                pheasant_core::Method::Get, #route, #re, #mime, #respond_fun
+            )
+        }
+    }
+}
+
+fn generate_service_from_responder(route: String, re: Option<Vec<String>>, mut fun: ItemFn) -> TS2 {
+    // the func that returns Service
+    let service_fun = clone_ident(&fun);
+    // the func that wraps the user defined service fn (-> Vec<u8>) into a fn (-> Response)
+    let respond_fun = suffix_ident(&service_fun, "_service");
+    // suffix user defined fn
+    suffix_fn_ident(&mut fun, "_respond");
+    let user_fun = ref_ident(&fun);
+
+    let vis = &fun.vis;
+    let re = gen_re(re);
+    let arg = gen_arg_ty(&fun);
+
+    // user defined service returns Response already
+    // this always has to be returned
+    quote! {
+        #fun
+
+        #vis async fn #respond_fun(i: #arg, p: Protocol) -> Response {
+            let mut resp = #user_fun(i);
+            resp.update_proto(p);
+
+            resp
+        }
+
+        #vis fn #service_fun() -> pheasant_core::Service {
+            pheasant_core::Service::new(pheasant_core::Method::Get, #route, #re, None, #respond_fun)
         }
     }
 }

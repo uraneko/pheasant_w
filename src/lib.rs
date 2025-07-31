@@ -11,7 +11,7 @@ use quote::quote;
 mod callback;
 mod resource;
 
-use callback::wrapper_fn;
+use callback::generate_service;
 use resource::{Resource, mime, re};
 
 #[proc_macro_attribute]
@@ -24,7 +24,7 @@ pub fn get(attr: TokenStream, fun: TokenStream) -> TokenStream {
     let mime = mime(&mut fun);
     let re = re(&mut fun);
 
-    let wra_fun = wrapper_fn(resou.route(), re, mime, fun);
+    let wra_fun = generate_service(resou.route(), re, mime, fun);
 
     quote! {
         #wra_fun
