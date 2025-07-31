@@ -101,7 +101,14 @@ impl Server {
         let req = Request::from_stream(&mut stream);
         println!("{:#?}", req);
 
-        let resp = Response::new(req, &self).await;
+        let resp = match req {
+            Err(err) => Response::from_err(err).await,
+            Ok(req) => {
+                let ss = self.service_status(req.method(), req.route());
+
+                Response::new(req, ss).await
+            }
+        };
         let payload = resp.respond();
 
         stream.write_all(&payload)?;

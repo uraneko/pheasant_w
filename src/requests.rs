@@ -93,6 +93,16 @@ impl Request {
         map.get(key).map(|s| s.as_str())
     }
 
+    /// returns a bool indicating wether this request's query
+    /// contains a param named `key`
+    pub fn has_param(&self, key: &str) -> bool {
+        let Some(ref map) = self.query else {
+            return false;
+        };
+
+        map.contains_key(key)
+    }
+
     // pub fn parse_query(&self) -> HashMap<&str, &str> {
     //     self
     //         .query

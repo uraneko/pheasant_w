@@ -34,15 +34,9 @@ pub struct Response {
 
 impl Response {
     // Generates a new response instance
-    pub(crate) async fn new(req: PheasantResult<Request>, server: &Server) -> Self {
-        if let Err(err) = req {
-            return Self::from_err(err).await;
-        }
-
-        let req = req.unwrap();
+    pub(crate) async fn new(req: Request, ss: PheasantResult<(Status, &Service)>) -> Self {
         let proto = req.proto();
 
-        let ss = server.service_status(req.method(), req.route());
         if let Err(err) = ss {
             return Self::from_err(err).await;
         }
@@ -71,7 +65,7 @@ impl Response {
     }
 
     /// generates a response from a client/server error
-    async fn from_err(err: PheasantError) -> Self {
+    pub async fn from_err(err: PheasantError) -> Self {
         let (headers, body) = match err {
             PheasantError::ServerError(se) => server_error(&se).await,
             PheasantError::ClientError(ce) => client_error(&ce).await,
