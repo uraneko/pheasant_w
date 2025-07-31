@@ -1,11 +1,11 @@
-use pheasant_core::{Method, Request, Server, Service, get};
+use pheasant_core::{HeaderMap, Method, Protocol, Request, Response, Server, Service, get};
 
 #[tokio::main]
 async fn main() {
     let mut phe = Server::new([127, 0, 0, 1], 8883, 3333).unwrap();
     phe.service(hello);
     phe.service(favicon);
-    phe.service(|| Service::new(Method::Get, "/icon", [], "image/svg+xml", svg));
+    // phe.service(|| Service::new(Method::Get, "/icon", [], "image/svg+xml", svg));
     phe.serve().await;
 }
 
@@ -22,7 +22,6 @@ impl From<Request> for Who {
 }
 
 #[get("/hello")]
-#[mime("text/html")]
 async fn hello(who: Who) -> Vec<u8> {
     format!("<h1>hello {}</h1>", who.name).into_bytes()
 }
@@ -38,6 +37,13 @@ async fn favicon(_: ()) -> Vec<u8> {
 
 // #[get("/icon")]
 // #[mime("image/svg+xml")]
-async fn svg(who: Who) -> Vec<u8> {
-    std::fs::read_to_string(who.name).unwrap().into_bytes()
+async fn svg(who: Who, p: Protocol) -> Response {
+    let mut resp = Response::template(p);
+    resp.set_header(
+        "Content-Type",
+        "image/svg+xml".parse::<mime::Mime>().unwrap(),
+    );
+    resp.update_body(std::fs::read_to_string(who.name).unwrap().into_bytes());
+
+    resp
 }

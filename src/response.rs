@@ -11,13 +11,38 @@ use crate::{
 
 const SERVER: &str = "Pheasant (dev/0.1.0)";
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum StatusState {
+    Status(Status),
+    #[default]
+    Pending,
+}
+
+impl StatusState {
+    fn code(&self) -> Option<u16> {
+        let Self::Status(s) = self else {
+            return None;
+        };
+
+        Some(s.code())
+    }
+
+    fn text(&self) -> Option<&str> {
+        let Self::Status(s) = self else {
+            return None;
+        };
+
+        Some(s.text())
+    }
+}
+
 /// Http Response type
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Response {
     proto: Protocol,
     body: Option<Vec<u8>>,
     headers: HashMap<String, String>,
-    status: Status,
+    status: StatusState,
 }
 
 // impl Serialize for Response {
@@ -32,37 +57,108 @@ pub struct Response {
 //     }
 // }
 
+// struct Template;
+// struct Payload;
+// Response<Template>;
+// Response<Payload>;
+
 impl Response {
-    // Generates a new response instance
-    pub(crate) async fn new(req: Request, ss: PheasantResult<(Status, &Service)>) -> Self {
-        let proto = req.proto();
-
-        if let Err(err) = ss {
-            return Self::from_err(err).await;
-        }
-        let (status, service) = ss.unwrap();
-
-        let (headers, body) = match status {
-            Status::Successful(Successful::OK) => {
-                let (h, b) = successful(req, service).await;
-
-                (h, Some(b))
-            }
-            Status::Redirection(Redirection::SeeOther) => {
-                let h = redirection(req, service).await;
-
-                (h, None)
-            }
-            _ => unimplemented!("other status codes are not yet implemented; {}", file!()),
-        };
-
+    // generates a new Response template
+    pub fn template(proto: Protocol) -> Self {
         Self {
-            headers,
             proto,
-            body,
-            status,
+            headers: HashMap::new(),
+            body: None,
+            status: StatusState::default(),
         }
     }
+
+    // NOTE &Service contains the function that returns the Response template
+    pub async fn payload(req: Request, ss: PheasantResult<(Status, &Service)>) -> Self {
+        if let Err(err) = ss {
+            return Self::from_err(err).await;
+        };
+
+        let (status, service) = ss.unwrap();
+        let mime = mime(&req, service);
+
+        let mut resp = (service.service())(req).await;
+        resp.update_status(status, mime, service.route());
+
+        resp
+    }
+
+    pub fn update_status(&mut self, status: Status, mime: Mime, route: &str) {
+        match status {
+            Status::Informational(i) => (),
+            Status::Successful(s) => self.successful(mime),
+            Status::Redirection(r) => self.redirection(route),
+            _ => unreachable!("matched for errors a few lines ago"),
+        }
+
+        self.status = StatusState::Status(status);
+    }
+
+    pub fn update_body(&mut self, data: Vec<u8>) {
+        self.body = Some(data);
+    }
+
+    pub fn update_proto(&mut self, proto: Protocol) {
+        self.proto = proto;
+    }
+
+    fn successful(&mut self, mime: Mime) {
+        if let Some(ref mut body) = self.body {
+            *body = deflate::deflate_bytes(&body);
+            *body = deflate::deflate_bytes_gzip(&body);
+            let len = body.len();
+
+            self.set_header::<String>("Content-Encoding".into(), "deflate, gzip".into());
+            self.set_header("Content-Length".into(), len);
+            self.set_header("Content-Type", mime);
+            self.set_header("Date".into(), Utc::now());
+            self.set_header::<String>("Server".into(), SERVER.into());
+        }
+    }
+
+    // this doesnt need to be async
+    // there is no system IO going on here
+    fn redirection(&mut self, route: &str) {
+        self.set_header::<String>("Location".into(), route.into());
+        self.set_header("Content-Length".into(), 0);
+    }
+
+    // Generates a new response instance
+    // #[deprecated(note = "use the macro (calls template) then payload instead")]
+    // pub(crate) async fn new(req: Request, ss: PheasantResult<(Status, &Service)>) -> Self {
+    //     let proto = req.proto();
+    //
+    //     if let Err(err) = ss {
+    //         return Self::from_err(err).await;
+    //     }
+    //     let (status, service) = ss.unwrap();
+    //
+    //     let (headers, body) = match status {
+    //         Status::Successful(Successful::OK) => {
+    //             let (h, b) = successful(req, service).await;
+    //
+    //             (h, Some(b))
+    //         }
+    //         Status::Redirection(Redirection::SeeOther) => {
+    //             let h = redirection(req, service).await;
+    //
+    //             (h, None)
+    //         }
+    //         _ => unimplemented!("other status codes are not yet implemented; {}", file!()),
+    //     };
+    //
+    //     Self {
+    //         headers,
+    //         proto,
+    //         body,
+    //         status,
+    //     }
+    // }
 
     /// generates a response from a client/server error
     pub async fn from_err(err: PheasantError) -> Self {
@@ -74,7 +170,7 @@ impl Response {
 
         return Self {
             proto: Protocol::HTTP1_1,
-            status: Status::from(err),
+            status: StatusState::Status(Status::from(err)),
             headers,
             body,
         };
@@ -87,8 +183,8 @@ impl Response {
         let mut payload = format!(
             "{} {} {}\n",
             self.proto,
-            self.status.code(),
-            self.status.text(),
+            self.status.code().unwrap(),
+            self.status.text().unwrap(),
         );
         let mut iter = self.headers.into_iter();
         while let Some((ref h, ref v)) = iter.next() {
@@ -122,6 +218,9 @@ impl HeaderMap for Response {
     }
 }
 
+// resolve the mime type of the response content
+// if none is found then falls back to text html
+// TODO also consider the `Accept` header
 fn mime(req: &Request, service: &Service) -> Mime {
     let fallback = service.mime().unwrap_or(&mime::TEXT_HTML);
 
@@ -129,44 +228,10 @@ fn mime(req: &Request, service: &Service) -> Mime {
         .unwrap_or(fallback.clone())
 }
 
+// check if data is already compressed
+// could be the case for some archives or some image types
 fn is_already_compressed(mime: &Mime) -> bool {
     todo!()
-}
-
-async fn successful(mut req: Request, service: &Service) -> (HashMap<String, String>, Vec<u8>) {
-    let mime = mime(&req, &service);
-
-    let mut headers = req.headers();
-    headers.clear();
-
-    let body = (service.service())(req).await;
-    let body = deflate::deflate_bytes(&body);
-    let body = deflate::deflate_bytes_gzip(&body);
-    let len = body.len();
-
-    // these are success headers
-    headers.insert("Content-Encoding".into(), "deflate, gzip".into());
-    headers.insert("Content-Type".into(), mime.to_string());
-    headers.insert("Content-Length".into(), format!("{}", len));
-    headers.insert("Date".into(), Utc::now().to_string());
-    // add server.name/version field
-    headers.insert("Server".into(), SERVER.into());
-
-    (headers, body)
-}
-
-async fn redirection(mut req: Request, service: &Service) -> HashMap<String, String> {
-    let mime = mime(&req, &service);
-    let route = service.route().into();
-
-    let mut headers = req.headers();
-    headers.clear();
-
-    headers.insert("Location".into(), route);
-    headers.insert("Content-Type".into(), mime.to_string());
-    headers.insert("Content-Length".into(), String::from("0"));
-
-    headers
 }
 
 /// umbrella fn for client error headers generation fns
@@ -236,3 +301,7 @@ async fn http_version_not_supported() -> (HashMap<String, String>, Vec<u8>) {
         body,
     )
 }
+
+impl Header for chrono::DateTime<Utc> {}
+
+impl Header for String {}

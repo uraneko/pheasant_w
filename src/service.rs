@@ -1,6 +1,6 @@
 use std::pin::Pin;
 
-use super::{IntoRoutes, Method, Request, Route};
+use super::{IntoRoutes, Method, Protocol, Request, Response, Route};
 
 use mime::Mime;
 
@@ -18,7 +18,7 @@ unsafe impl Send for Service {}
 unsafe impl Sync for Service {}
 
 // the future return type
-type BoxFut<'a> = Pin<Box<dyn Future<Output = Vec<u8>> + Send + 'a>>;
+type BoxFut<'a> = Pin<Box<dyn Future<Output = Response> + Send + 'a>>;
 
 // the wrapper function type
 type BoxFun = Box<dyn Fn(Request) -> BoxFut<'static> + Send + Sync>;
@@ -51,8 +51,8 @@ impl Service {
     ///
     pub fn new<F, I, O, R>(method: Method, route: &str, redirects: I, mime: &str, call: F) -> Self
     where
-        F: Fn(R) -> O + Send + Sync + 'static,
-        O: Future<Output = Vec<u8>> + Send + 'static,
+        F: Fn(R, Protocol) -> O + Send + Sync + 'static,
+        O: Future<Output = Response> + Send + 'static,
         R: From<Request>,
         I: IntoRoutes,
     {
@@ -62,9 +62,11 @@ impl Service {
             redirects: redirects.into_routes(),
             mime: mime.parse().ok(),
             service: Box::new(move |req: Request| {
+                let proto = req.proto();
+
                 let input: R = req.into();
 
-                Box::pin(call(input))
+                Box::pin(call(input, proto))
             }),
         }
     }

@@ -106,7 +106,7 @@ impl Server {
             Ok(req) => {
                 let ss = self.service_status(req.method(), req.route());
 
-                Response::new(req, ss).await
+                Response::payload(req, ss).await
             }
         };
         let payload = resp.respond();

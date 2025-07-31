@@ -476,7 +476,6 @@ dependencies = [
 [[package]]
 name = "pheasant_macro_get"
 version = "0.1.0"
-source = "git+https://github.com/uraneko/pheasant_macro_get#884029e3db1662ebba5078d20ebf27da0e5d4c3c"
 dependencies = [
  "impls",
  "proc-macro2",
