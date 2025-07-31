@@ -1,6 +1,6 @@
 use proc_macro2::{Span, TokenStream as TS2};
 use quote::quote;
-use syn::{FnArg, Ident, ItemFn, PatType, Type};
+use syn::{FnArg, Ident, ItemFn, PatType, ReturnType, Type};
 
 // suffixes an ident with the passed &str value
 fn suffix_fn_ident(fun: &mut ItemFn, suffix: &str) {
@@ -46,6 +46,14 @@ fn gen_arg_ty(fun: &ItemFn) -> &Type {
     ty
 }
 
+fn match_ret_ty(fun: &ItemFn) -> bool {
+    let ReturnType::Type(tk, ty) = &fun.sig.output else {
+        panic!("return type variant was default instead of type");
+    };
+
+    quote! { #ty }.to_string().ends_with("Response")
+}
+
 pub fn generate_service(
     route: String,
     re: Option<Vec<String>>,
@@ -55,15 +63,9 @@ pub fn generate_service(
     // let vis = &fun.vis;
     // let mime = gen_mime(mime);
     // let re = gen_re(re);
+    let is_responder = match_ret_ty(&fun);
 
-    let is_response = {
-        let ty = &fun.sig.output;
-        println!("{}", quote! { #ty });
-
-        quote! { #ty }.to_string() == "-> Response"
-    };
-
-    if is_response {
+    if is_responder {
         generate_service_from_responder(route, re, fun)
     } else {
         generate_service_from_data_func(route, mime, re, fun)
@@ -98,12 +100,13 @@ fn generate_service_from_data_func(
         // NOTE this here is the new suffixed
         // i.e., the original service function itself should be modified
         // to return a Response template
-        #vis async fn #respond_fun(i: #arg, p: Protocol) -> Response {
-            let resp = Response::template(p);
-            // resp.header::<Mime>("Content-Type", "text/html");
+        #vis async fn #respond_fun(
+            i: #arg,
+            p: pheasant_core::Protocol
+        ) -> pheasant_core::Response {
+            let mut resp = pheasant_core::Response::template(p);
             let data = #user_fun(i).await;
-            resp.body = Some(data);
-            // resp.status = StatusState::default() // set by ::template()
+            resp.update_body(data);
 
             resp
         }
@@ -134,15 +137,15 @@ fn generate_service_from_responder(route: String, re: Option<Vec<String>>, mut f
     quote! {
         #fun
 
-        #vis async fn #respond_fun(i: #arg, p: Protocol) -> Response {
-            let mut resp = #user_fun(i);
+        #vis async fn #respond_fun(i: #arg, p: pheasant_core::Protocol) -> pheasant_core::Response {
+            let mut resp = #user_fun(i).await;
             resp.update_proto(p);
 
             resp
         }
 
         #vis fn #service_fun() -> pheasant_core::Service {
-            pheasant_core::Service::new(pheasant_core::Method::Get, #route, #re, None, #respond_fun)
+            pheasant_core::Service::new(pheasant_core::Method::Get, #route, #re, "", #respond_fun)
         }
     }
 }
