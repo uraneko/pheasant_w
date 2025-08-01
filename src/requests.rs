@@ -249,12 +249,26 @@ fn read_body(v: &mut Vec<u8>, s: &mut BufReader<&mut TcpStream>, len: usize) -> 
     Ok(())
 }
 
+// TODO: this is very fragile
+// since it contains no error handling, add it
+// also add support for key only params (bool params), which is valid in the URI rfc
+//
+// basically, if a query param contains no '=', then the whole param value would be its key name and
+// its value would be the bool value `true`
 fn parse_query(query: &str) -> HashMap<String, String> {
     query
         .split('&')
         // BUG this crashes the server when uri query is badly formatted
         // TODO scan query after getting request and return ClientError::BadRequest if query is faulty
-        .map(|e| -> [&str; 2] { e.splitn(2, '=').collect::<Vec<&str>>().try_into().unwrap() })
+        .map(|e| parse_param(e))
         .map(|s| (s[0].to_string(), s[1].to_string()))
         .collect()
+}
+
+fn parse_param(p: &str) -> [&str; 2] {
+    if p.contains('=') {
+        p.splitn(2, '=').collect::<Vec<&str>>().try_into().unwrap()
+    } else {
+        [p, "true"]
+    }
 }
