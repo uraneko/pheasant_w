@@ -466,6 +466,7 @@ dependencies = [
  "crossbeam-channel",
  "deflate",
  "mime",
+ "pheasant_macro_error_code",
  "pheasant_macro_get",
  "serde",
  "serde_json",
@@ -474,8 +475,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "pheasant_macro_get"
+name = "pheasant_macro_error_code"
 version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "pheasant_macro_get"
+version = "0.1.1"
 dependencies = [
  "impls",
  "proc-macro2",

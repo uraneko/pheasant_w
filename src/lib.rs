@@ -7,20 +7,24 @@ use std::string::FromUtf8Error;
 
 use mime::Mime;
 
+pub mod fail;
 pub mod requests;
 pub mod response;
 pub mod server;
 pub mod service;
-pub mod status_codes;
+pub mod status;
 
+pub use fail::Fail;
 pub use requests::Request;
 pub use response::Response;
 pub use server::Server;
 pub use service::Service;
-pub use status_codes::{
-    ClientError, Informational, Redirection, ResponseStatus, ServerError, Status, Successful,
+pub use status::{
+    ClientError, ErrorStatus, Informational, Redirection, ResponseStatus, ServerError, Status,
+    Successful,
 };
 
+pub use pheasant_macro_error_code::error_code;
 pub use pheasant_macro_get::get;
 
 pub type PheasantResult<T> = Result<T, PheasantError>;

@@ -6,8 +6,8 @@ use serde::Serialize;
 use url::Url;
 
 use super::{
-    ClientError, Method, PheasantError, PheasantResult, Redirection, Request, Response, Route,
-    Service, Status, Successful,
+    ClientError, Fail, Method, PheasantError, PheasantResult, Protocol, Redirection, Request,
+    Response, ResponseStatus, Route, ServerError, Service, Status, Successful,
 };
 
 /// the http server type
@@ -16,6 +16,8 @@ pub struct Server {
     socket: TcpListener,
     /// container for the server services
     services: Vec<Service>,
+    // container for the server error responses (client/server errors)
+    errors: Vec<Fail>,
 }
 
 impl Server {
@@ -46,6 +48,7 @@ impl Server {
                 TcpListener::bind((addr, port))?
             },
             services: vec![],
+            errors: vec![],
         })
     }
 
@@ -56,6 +59,13 @@ impl Server {
     {
         self.services.push(s());
     }
+
+    pub fn error<E>(&mut self, e: E)
+    where
+        E: Fn() -> Fail,
+    {
+        self.errors.push(e());
+    }
 }
 
 impl Server {
@@ -63,25 +73,32 @@ impl Server {
     /// returns `(Status, &Service)`
     ///
     /// ### Error
-    /// returns an Err, a client error if the service is not found
+    /// returns an Err, a client error (404 not found) if the service is not found
+    // TODO this should return Result<(Status, &Service), &Fail>
     pub fn service_status(
         &self,
         method: Method,
         route: &str,
     ) -> PheasantResult<(Status, &Service)> {
-        let service = self
+        match self
             .services
             .iter()
-            .find(move |s| s.method() == method && (s.route() == route || s.redirects_to(&route)));
-
-        match service {
+            .find(move |s| s.method() == method && (s.route() == route || s.redirects_to(&route)))
+        {
             Some(s) if s.route() == route => Ok((Status::Successful(Successful::OK), s)),
             Some(s) if s.redirects_to(&route) => {
                 Ok((Status::Redirection(Redirection::SeeOther), s))
             }
             None => Err(PheasantError::ClientError(ClientError::NotFound)),
-            Some(_) => unreachable!("filtered out arm not reachable"),
+            Some(_) => unreachable!("unimplemented"),
         }
+    }
+
+    /// searches for the speficied `Fail` (error status fallback service)
+    /// returns `Some(&Fail)` if found
+    /// else returns `None`
+    pub fn fail_status(&self, status_code: u16) -> Option<&Fail> {
+        self.errors.iter().find(move |e| e.code() == status_code)
     }
 
     /// launch the service
@@ -99,23 +116,40 @@ impl Server {
     // handles a tcp stream connection
     async fn handle_stream(&self, mut stream: TcpStream) -> PheasantResult<TcpStream> {
         let req = Request::from_stream(&mut stream);
-        println!("{:#?}", req);
+        println!("{:#?}", req); // if req is err we return a status error response
+        let Ok(req) = req else {
+            let resp = self.error_template(400, None).await;
 
-        let resp = match req {
-            Err(err) => Response::from_err(err).await,
-            Ok(req) => {
-                let ss = self.service_status(req.method(), req.route());
-
-                Response::payload(req, ss).await
-            }
+            return send_response(stream, resp);
         };
-        let payload = resp.respond();
 
-        stream.write_all(&payload)?;
-        stream.flush()?;
+        let resp = match self.service_status(req.method(), req.route()) {
+            Ok((status, service)) => Response::payload(req, status, service).await,
+            Err(PheasantError::ClientError(ClientError::NotFound)) => {
+                self.error_template(404, Some(req.proto())).await
+            }
+            _ => unimplemented!("not implemented yet"),
+        };
 
-        Ok(stream)
+        send_response(stream, resp)
     }
+
+    pub async fn error_template(&self, code: u16, proto: Option<Protocol>) -> Response {
+        let fail = self.fail_status(code);
+        Response::from_err(fail, proto)
+            .await
+            .unwrap_or(Response::not_implemented().await)
+    }
+}
+
+// sends the response to the client and returns the connection tcp stream
+fn send_response(mut stream: TcpStream, resp: Response) -> PheasantResult<TcpStream> {
+    let payload = resp.respond();
+
+    stream.write_all(&payload)?;
+    stream.flush()?;
+
+    Ok(stream)
 }
 
 // #[deprecated(note = "replaced by Request::from_stream")]

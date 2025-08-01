@@ -5,8 +5,8 @@ use mime::Mime;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::{
-    ClientError, Header, HeaderMap, PheasantError, PheasantResult, Protocol, Redirection, Request,
-    ResponseStatus, Server, ServerError, Service, Status, Successful,
+    ClientError, Fail, Header, HeaderMap, PheasantError, PheasantResult, Protocol, Redirection,
+    Request, ResponseStatus, Server, ServerError, Service, Status, Successful,
 };
 
 const SERVER: &str = "Pheasant (dev/0.1.0)";
@@ -63,7 +63,7 @@ pub struct Response {
 // Response<Payload>;
 
 impl Response {
-    // generates a new Response template
+    /// generates a new Response template from a protocol value
     pub fn template(proto: Protocol) -> Self {
         Self {
             proto,
@@ -73,13 +73,11 @@ impl Response {
         }
     }
 
+    /// returns a filled response ready for consumption
+    ///
+    /// dont use this directly
     // NOTE &Service contains the function that returns the Response template
-    pub async fn payload(req: Request, ss: PheasantResult<(Status, &Service)>) -> Self {
-        if let Err(err) = ss {
-            return Self::from_err(err).await;
-        };
-
-        let (status, service) = ss.unwrap();
+    pub async fn payload(req: Request, status: Status, service: &Service) -> Self {
         let mime = mime(&req, service);
 
         let mut resp = (service.service())(req).await;
@@ -93,98 +91,46 @@ impl Response {
         resp
     }
 
-    pub fn update_status(&mut self, status: Status, mime: Option<Mime>, route: &str) {
-        match status {
-            Status::Informational(i) => (),
-            Status::Successful(s) => self.successful(mime),
-            Status::Redirection(r) => self.redirection(route),
-            _ => unreachable!("matched for errors a few lines ago"),
-        }
-
-        self.status = StatusState::Status(status);
-    }
-
-    pub fn update_body(&mut self, data: Vec<u8>) {
-        self.body = Some(data);
-    }
-
-    pub fn update_proto(&mut self, proto: Protocol) {
-        self.proto = proto;
-    }
-
-    fn successful(&mut self, mime: Option<Mime>) {
-        if let Some(ref mut body) = self.body {
-            *body = deflate::deflate_bytes(&body);
-            *body = deflate::deflate_bytes_gzip(&body);
-            let len = body.len();
-
-            self.set_header::<String>("Content-Encoding".into(), "deflate, gzip".into());
-            self.set_header("Content-Length".into(), len);
-            if let Some(mime) = mime {
-                self.set_header("Content-Type", mime);
-            }
-            self.set_header("Date".into(), Utc::now());
-            self.set_header::<String>("Server".into(), SERVER.into());
+    pub fn with_status(code: u16) -> Self {
+        Self {
+            status: StatusState::Status(code.into()),
+            ..Default::default()
         }
     }
-
-    // this doesnt need to be async
-    // there is no system IO going on here
-    fn redirection(&mut self, route: &str) {
-        self.set_header::<String>("Location".into(), route.into());
-        self.set_header("Content-Length".into(), 0);
-    }
-
-    // Generates a new response instance
-    // #[deprecated(note = "use the macro (calls template) then payload instead")]
-    // pub(crate) async fn new(req: Request, ss: PheasantResult<(Status, &Service)>) -> Self {
-    //     let proto = req.proto();
-    //
-    //     if let Err(err) = ss {
-    //         return Self::from_err(err).await;
-    //     }
-    //     let (status, service) = ss.unwrap();
-    //
-    //     let (headers, body) = match status {
-    //         Status::Successful(Successful::OK) => {
-    //             let (h, b) = successful(req, service).await;
-    //
-    //             (h, Some(b))
-    //         }
-    //         Status::Redirection(Redirection::SeeOther) => {
-    //             let h = redirection(req, service).await;
-    //
-    //             (h, None)
-    //         }
-    //         _ => unimplemented!("other status codes are not yet implemented; {}", file!()),
-    //     };
-    //
-    //     Self {
-    //         headers,
-    //         proto,
-    //         body,
-    //         status,
-    //     }
-    // }
 
     /// generates a response from a client/server error
-    pub async fn from_err(err: PheasantError) -> Self {
-        let (headers, body) = match err {
-            PheasantError::ServerError(se) => server_error(&se).await,
-            PheasantError::ClientError(ce) => client_error(&ce).await,
+    pub async fn from_err(
+        fail: Option<&Fail>,
+        proto: Option<Protocol>,
+    ) -> Result<Self, PheasantError> {
+        let Some(fail) = fail else {
+            return Err(PheasantError::ServerError(ServerError::NotImplemented));
         };
-        let body = Some(body);
 
-        return Self {
+        let mut resp = (fail.fail())().await;
+        resp.update_mime(fail.mime());
+        resp.update_status(fail.code().into(), None, "");
+        resp.update_proto(proto.unwrap_or(Protocol::default()));
+
+        Ok(resp)
+    }
+
+    /// impl of server error not implemented
+    /// this http error response is the fallback of all http error responses
+    /// when the user hasnt defined a service(fail) for a needed error response
+    /// a response gets generated from this error
+    pub async fn not_implemented() -> Self {
+        Self {
+            status: StatusState::Status(Status::ServerError(ServerError::NotImplemented)),
+            body: Some(b"{ error: 'NotImplemented', code: 501 }".into()),
+            // TODO fill these headers
+            headers: HashMap::from([]),
             proto: Protocol::HTTP1_1,
-            status: StatusState::Status(Status::from(err)),
-            headers,
-            body,
-        };
+        }
     }
 
     /// format the response into bytes to be sent to the client
-    pub(crate) fn respond(self) -> Vec<u8> {
+    pub fn respond(self) -> Vec<u8> {
         println!("{:#?}", self);
         // serde_json::to_string(&self).unwrap().into_bytes()
         let mut payload = format!(
@@ -207,6 +153,62 @@ impl Response {
         }
 
         payload
+    }
+}
+
+impl Response {
+    pub fn update_status(&mut self, status: Status, mime: Option<Mime>, route: &str) {
+        match status {
+            Status::Informational(i) => (),
+            Status::Successful(s) => self.successful(mime),
+            Status::Redirection(r) => self.redirection(route),
+            _ => (),
+        }
+
+        self.status = StatusState::Status(status);
+    }
+
+    pub fn update_body(&mut self, data: Vec<u8>) {
+        self.body = Some(data);
+    }
+
+    // updates mime type if it exists
+    // returns bool indicating wether the update operation took place or not
+    pub fn update_mime(&mut self, mime: Option<&Mime>) -> bool {
+        let Some(mime) = mime else { return false };
+        // TODO fix header traits
+        self.set_header::<Mime>("Content-Type", mime.clone());
+
+        true
+    }
+
+    pub fn update_proto(&mut self, proto: Protocol) {
+        self.proto = proto;
+    }
+}
+
+impl Response {
+    fn successful(&mut self, mime: Option<Mime>) {
+        if let Some(ref mut body) = self.body {
+            *body = deflate::deflate_bytes(&body);
+            *body = deflate::deflate_bytes_gzip(&body);
+            let len = body.len();
+
+            self.set_header::<String>("Content-Encoding".into(), "deflate, gzip".into());
+            self.set_header("Content-Length".into(), len);
+            if let Some(mime) = mime {
+                self.set_header("Content-Type", mime);
+            }
+            self.set_header("Date".into(), Utc::now());
+            self.set_header::<String>("Server".into(), SERVER.into());
+        }
+    }
+
+    // this doesnt need to be async
+    // there is no system IO going on here
+    fn redirection(&mut self, route: &str) {
+        self.set_header::<String>("Location".into(), route.into());
+        self.set_header("Content-Length".into(), 0);
     }
 }
 

@@ -102,16 +102,6 @@ pub enum Informational {
     Continue = 100,
 }
 
-/// enum wrapping all response statuses
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum Status {
-    Informational(Informational),
-    Successful(Successful),
-    Redirection(Redirection),
-    ClientError(ClientError),
-    ServerError(ServerError),
-}
-
 impl From<PheasantError> for Status {
     fn from(err: PheasantError) -> Self {
         match err {
@@ -122,7 +112,7 @@ impl From<PheasantError> for Status {
     }
 }
 
-/// implements shared behavior amongst response statuses
+/// implements shared behavior amongst response status
 pub trait ResponseStatus {
     /// returns the status text value
     fn text(&self) -> &str;
@@ -251,6 +241,16 @@ impl ResponseStatus for Informational {
     }
 }
 
+/// enum wrapping all response status
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum Status {
+    Informational(Informational),
+    Successful(Successful),
+    Redirection(Redirection),
+    ClientError(ClientError),
+    ServerError(ServerError),
+}
+
 impl ResponseStatus for Status {
     fn text(&self) -> &str {
         match self {
@@ -272,3 +272,84 @@ impl ResponseStatus for Status {
         }
     }
 }
+
+/// error response status
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum ErrorStatus {
+    Client(ClientError),
+    Server(ServerError),
+}
+
+impl ResponseStatus for ErrorStatus {
+    fn text(&self) -> &str {
+        match self {
+            Self::Client(ce) => ce.text(),
+            Self::Server(se) => se.text(),
+        }
+    }
+
+    fn code(&self) -> u16 {
+        match self {
+            Self::Client(ce) => ce.code(),
+            Self::Server(se) => se.code(),
+        }
+    }
+}
+
+// WARN this is very dangerous
+impl From<u16> for ErrorStatus {
+    fn from(u: u16) -> Self {
+        if u > 499 {
+            Self::Server(unsafe { std::mem::transmute::<u16, ServerError>(u) })
+        } else {
+            Self::Client(unsafe { std::mem::transmute::<u16, ClientError>(u) })
+        }
+    }
+}
+
+impl From<u16> for Status {
+    fn from(code: u16) -> Self {
+        if code < 200 {
+            Self::Informational(unsafe { std::mem::transmute::<u16, Informational>(code) })
+        } else if code < 300 {
+            Self::Successful(unsafe { std::mem::transmute::<u16, Successful>(code) })
+        } else if code < 400 {
+            Self::Redirection(unsafe { std::mem::transmute::<u16, Redirection>(code) })
+        } else if code < 500 {
+            Self::ClientError(unsafe { std::mem::transmute::<u16, ClientError>(code) })
+        } else {
+            Self::ServerError(unsafe { std::mem::transmute::<u16, ServerError>(code) })
+        }
+    }
+}
+
+/// request accpetance response status
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum GoodStatus {
+    Redirection(Redirection),
+    Informational(Informational),
+    Successful(Successful),
+}
+
+impl ResponseStatus for GoodStatus {
+    fn text(&self) -> &str {
+        match self {
+            Self::Informational(i) => i.text(),
+            Self::Successful(s) => s.text(),
+            Self::Redirection(re) => re.text(),
+        }
+    }
+
+    fn code(&self) -> u16 {
+        match self {
+            Self::Informational(i) => i.code(),
+            Self::Successful(s) => s.code(),
+            Self::Redirection(re) => re.code(),
+        }
+    }
+}
+
+// enum Status {
+//     Reject(ErrorStatus),
+//     Accept(AcceptStatus),
+// }
