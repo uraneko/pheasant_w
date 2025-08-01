@@ -31,21 +31,27 @@ impl Server {
     ///
     /// ### Error
     ///
-    pub fn new(addr: impl Into<Ipv4Addr>, port: u16, max: usize) -> PheasantResult<Self> {
+    pub fn new(addr: impl Into<Ipv4Addr>, mut port: u16, max: usize) -> PheasantResult<Self> {
         Ok(Self {
             socket: {
                 let addr = addr.into();
-                println!(
-                    "\x1b[1;38;2;237;203;244mServer bound at http://{}:{}\x1b[0m",
-                    addr, port
-                );
-
                 // `impl From<io::Error> for PheasantError` is for this
                 // TODO when this errors out
                 // we append the port number and try again
                 // until we get a free port
                 // TODO remove impl From<io::Error> for PheasantError
-                TcpListener::bind((addr, port))?
+                let mut socket = TcpListener::bind((addr, port));
+                while socket.is_err() {
+                    port += 1;
+                    socket = TcpListener::bind((addr, port));
+                }
+
+                println!(
+                    "\x1b[1;38;2;237;203;244mServer bound at http://{}:{}\x1b[0m",
+                    addr, port
+                );
+
+                socket?
             },
             services: vec![],
             errors: vec![],
