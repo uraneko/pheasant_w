@@ -164,7 +164,7 @@ impl From<String> for Route {
 
 impl From<&str> for Route {
     fn from(s: &str) -> Self {
-        let s = if !s.starts_with('/') {
+        let s = if !s.starts_with('/') && s != "*" {
             format!("/{}", s)
         } else {
             s.to_string()

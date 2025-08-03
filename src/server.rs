@@ -95,14 +95,16 @@ impl Server {
         method: Method,
         route: &str,
     ) -> PheasantResult<(Status, &Service)> {
-        match self
-            .services
-            .iter()
-            .find(move |s| s.method() == method && (s.route() == route || s.redirects_to(&route)))
-        {
+        match self.services.iter().find(move |s| {
+            s.method() == method
+                && (s.route() == route || s.route() == "*" || s.redirects_to(&route))
+        }) {
             Some(s) if s.route() == route => Ok((Status::Successful(Successful::OK), s)),
             Some(s) if s.redirects_to(&route) => {
                 Ok((Status::Redirection(Redirection::SeeOther), s))
+            }
+            Some(s) if s.route() == "*" && s.method() == Method::Options => {
+                Ok((Status::Successful(Successful::NoContent), s))
             }
             None => Err(PheasantError::ClientError(ClientError::NotFound)),
             Some(_) => unreachable!("unimplemented"),

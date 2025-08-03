@@ -229,6 +229,12 @@ impl Response {
 
         self
     }
+
+    pub fn set_cors(&mut self, cors: Cors) -> &mut Self {
+        self.cors = Some(cors);
+
+        self
+    }
 }
 
 impl Response {
@@ -290,6 +296,7 @@ fn is_already_compressed(mime: &Mime) -> bool {
 }
 
 /// umbrella fn for client error headers generation fns
+#[deprecated]
 async fn client_error(status: &ClientError) -> (HashMap<String, String>, Vec<u8>) {
     match status {
         ClientError::BadRequest => bad_request().await,
@@ -298,9 +305,11 @@ async fn client_error(status: &ClientError) -> (HashMap<String, String>, Vec<u8>
     }
 }
 
+#[deprecated]
 const BAD_REQUEST: &[u8] = include_bytes!("../templates/400.html");
 
 /// 400 client error header generation
+#[deprecated]
 async fn bad_request() -> (HashMap<String, String>, Vec<u8>) {
     // let body = b"{\n\t'error': 'Bad Request'\n\t'message': 'Some redundant response body'\n}";
     let body = BAD_REQUEST.to_vec();
@@ -315,9 +324,11 @@ async fn bad_request() -> (HashMap<String, String>, Vec<u8>) {
     )
 }
 
+#[deprecated]
 const NOT_FOUND: &[u8] = include_bytes!("../templates/404.html");
 
 /// 404 not found header generation
+#[deprecated]
 async fn not_found() -> (HashMap<String, String>, Vec<u8>) {
     let body = NOT_FOUND.to_vec();
     let len = body.len();
@@ -334,6 +345,7 @@ async fn not_found() -> (HashMap<String, String>, Vec<u8>) {
 }
 
 /// wrapper fn for server errors headers generation fns
+#[deprecated]
 async fn server_error(status: &ServerError) -> (HashMap<String, String>, Vec<u8>) {
     match status {
         ServerError::HTTPVersionNotSupported => http_version_not_supported().await,
@@ -341,9 +353,11 @@ async fn server_error(status: &ServerError) -> (HashMap<String, String>, Vec<u8>
     }
 }
 
+#[deprecated]
 const VERSION_NOT_SUPPORTED: &[u8] = include_bytes!("../templates/505.html");
 
 /// server error 505 response headers generation
+#[deprecated]
 async fn http_version_not_supported() -> (HashMap<String, String>, Vec<u8>) {
     let body = VERSION_NOT_SUPPORTED.to_vec();
     let len = body.len();
