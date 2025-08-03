@@ -7,12 +7,14 @@ use std::string::FromUtf8Error;
 
 use mime::Mime;
 
+pub mod cors;
 pub mod fail;
 pub mod requests;
 pub mod response;
 pub mod server;
 pub mod service;
 pub mod status;
+
 
 pub use fail::Fail;
 pub use requests::Request;
