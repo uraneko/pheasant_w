@@ -93,7 +93,8 @@ impl Response {
 
     pub fn with_status(code: u16) -> Self {
         Self {
-            status: StatusState::Status(code.into()),
+            // TODO handle error
+            status: StatusState::Status(code.try_into().unwrap()),
             ..Default::default()
         }
     }
@@ -109,7 +110,7 @@ impl Response {
 
         let mut resp = (fail.fail())().await;
         resp.update_mime(fail.mime());
-        resp.update_status(fail.code().into(), None, "");
+        resp.update_status(fail.code().try_into().unwrap(), None, "");
         resp.update_proto(proto.unwrap_or(Protocol::default()));
 
         Ok(resp)

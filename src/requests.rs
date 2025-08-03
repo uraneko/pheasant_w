@@ -249,12 +249,7 @@ fn read_body(v: &mut Vec<u8>, s: &mut BufReader<&mut TcpStream>, len: usize) -> 
     Ok(())
 }
 
-// TODO: this is very fragile
-// since it contains no error handling, add it
-// also add support for key only params (bool params), which is valid in the URI rfc
-//
-// basically, if a query param contains no '=', then the whole param value would be its key name and
-// its value would be the bool value `true`
+// parses the query params into key -> value pairs
 fn parse_query(query: &str) -> HashMap<String, String> {
     query
         .split('&')
@@ -265,10 +260,13 @@ fn parse_query(query: &str) -> HashMap<String, String> {
         .collect()
 }
 
+// NOTE this handles the pain points of parse_query
+// the check for `=` garentees the operation's success
 fn parse_param(p: &str) -> [&str; 2] {
     if p.contains('=') {
         p.splitn(2, '=').collect::<Vec<&str>>().try_into().unwrap()
     } else {
+        // TODO possibly make a HashSet of bool params alongside the HashMap of k -> v pairs
         [p, "true"]
     }
 }

@@ -20,6 +20,15 @@ pub struct Server {
     errors: Vec<Fail>,
 }
 
+// TODO Cookies ops
+// TODO CORS ops
+// WARN when responding to a credientialed request, the CORS glob/* header value is not allowed for the following headers
+// Access-Control-Allow-Origin, Access-Control-Allow-Headers, Access-Control-Allow-Methods and Access-Control-Expose-Headers
+// TODO Server.origins { whitelist, blacklist }
+
+// TODO Route/Origin/URI ops
+// TODO Clean up the crate error types system
+
 impl Server {
     /// creates a new server
     ///
@@ -36,9 +45,6 @@ impl Server {
             socket: {
                 let addr = addr.into();
                 // `impl From<io::Error> for PheasantError` is for this
-                // TODO when this errors out
-                // we append the port number and try again
-                // until we get a free port
                 // TODO remove impl From<io::Error> for PheasantError
                 let mut socket = TcpListener::bind((addr, port));
                 while socket.is_err() {
@@ -80,7 +86,6 @@ impl Server {
     ///
     /// ### Error
     /// returns an Err, a client error (404 not found) if the service is not found
-    // TODO this should return Result<(Status, &Service), &Fail>
     pub fn service_status(
         &self,
         method: Method,

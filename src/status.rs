@@ -17,6 +17,27 @@ pub enum ServerError {
     NetworkAuthenticationRequired = 511,
 }
 
+impl TryFrom<u16> for ServerError {
+    type Error = ();
+
+    fn try_from(u: u16) -> Result<Self, Self::Error> {
+        match u {
+            500 => Ok(ServerError::InternalServerError),
+            501 => Ok(ServerError::NotImplemented),
+            502 => Ok(ServerError::BadGateway),
+            503 => Ok(ServerError::ServiceUnavailable),
+            504 => Ok(ServerError::GatewayTimeout),
+            505 => Ok(ServerError::HTTPVersionNotSupported),
+            506 => Ok(ServerError::VariantAlsoNegotiates),
+            507 => Ok(ServerError::InsufficientStorage),
+            508 => Ok(ServerError::LoopDetected),
+            510 => Ok(ServerError::NotExtended),
+            511 => Ok(ServerError::NetworkAuthenticationRequired),
+            _ => Err(()),
+        }
+    }
+}
+
 /// http response client error status
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -53,6 +74,47 @@ pub enum ClientError {
     UnavailableForLegalReasons = 451,
 }
 
+impl TryFrom<u16> for ClientError {
+    type Error = ();
+
+    fn try_from(u: u16) -> Result<Self, Self::Error> {
+        match u {
+            // client errors
+            400 => Ok(ClientError::BadRequest),
+            401 => Ok(ClientError::Unauthorized),
+            // NOTE rarely used
+            402 => Ok(ClientError::PaymentRequired),
+            403 => Ok(ClientError::Forbidden),
+            404 => Ok(ClientError::NotFound),
+            405 => Ok(ClientError::MethodNotAllowed),
+            406 => Ok(ClientError::NotAcceptable),
+            407 => Ok(ClientError::ProxyAuthenticationRequired),
+            408 => Ok(ClientError::RequestTimeout),
+            409 => Ok(ClientError::Conflict),
+            410 => Ok(ClientError::Gone),
+            411 => Ok(ClientError::LengthRequired),
+            412 => Ok(ClientError::PreconditionFailed),
+            413 => Ok(ClientError::ContentTooLarge),
+            414 => Ok(ClientError::URITooLong),
+            415 => Ok(ClientError::UnsupportedMediaType),
+            416 => Ok(ClientError::RangeNotSatisfiable),
+            417 => Ok(ClientError::ExpectationFailed),
+            418 => Ok(ClientError::Imateapot),
+            421 => Ok(ClientError::MisdirectedRequest),
+            422 => Ok(ClientError::UnprocessableContent),
+            423 => Ok(ClientError::Locked),
+            424 => Ok(ClientError::FailedDependency),
+            425 => Ok(ClientError::TooEarly),
+            426 => Ok(ClientError::UpgradeRequired),
+            428 => Ok(ClientError::PreconditionRequired),
+            429 => Ok(ClientError::TooManyRequests),
+            431 => Ok(ClientError::RequestHeaderFieldsTooLarge),
+            451 => Ok(ClientError::UnavailableForLegalReasons),
+            _ => Err(()),
+        }
+    }
+}
+
 /// http response redirection status
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -76,6 +138,29 @@ pub enum Redirection {
     MultipleChoices = 300,
 }
 
+impl TryFrom<u16> for Redirection {
+    type Error = ();
+
+    fn try_from(u: u16) -> Result<Self, Self::Error> {
+        match u {
+            308 => Ok(Self::PermanentRedirect),
+            307 => Ok(Self::TemporaryRedirect),
+            // #[deprecated(
+            306 => Ok(Self::Unused),
+            // #[deprecated(
+            // Defined in a previous version of the HTTP specification
+            // to indicate that a requested response must be accessed by a proxy
+            305 => Ok(Self::UseProxyDeprecated),
+            304 => Ok(Self::NotModified),
+            303 => Ok(Self::SeeOther),
+            302 => Ok(Self::Found),
+            301 => Ok(Self::MovedPermanently),
+            300 => Ok(Self::MultipleChoices),
+            _ => Err(()),
+        }
+    }
+}
+
 /// http response successful status
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -92,6 +177,26 @@ pub enum Successful {
     OK = 200,
 }
 
+impl TryFrom<u16> for Successful {
+    type Error = ();
+
+    fn try_from(u: u16) -> Result<Self, Self::Error> {
+        match u {
+            226 => Ok(Self::IMUsed),
+            208 => Ok(Self::AlreadyReported),
+            207 => Ok(Self::MultiStatus),
+            206 => Ok(Self::PartialContent),
+            205 => Ok(Self::ResetContent),
+            204 => Ok(Self::NoContent),
+            203 => Ok(Self::NonAuthoritativeInformation),
+            202 => Ok(Self::Accepted),
+            201 => Ok(Self::Created),
+            200 => Ok(Self::OK),
+            _ => Err(()),
+        }
+    }
+}
+
 /// http response informational status
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -100,6 +205,20 @@ pub enum Informational {
     ProcessingDeprecated = 102,
     SwitchingProtocols = 101,
     Continue = 100,
+}
+
+impl TryFrom<u16> for Informational {
+    type Error = ();
+
+    fn try_from(u: u16) -> Result<Self, Self::Error> {
+        match u {
+            103 => Ok(Self::EarlyHints),
+            102 => Ok(Self::ProcessingDeprecated),
+            101 => Ok(Self::SwitchingProtocols),
+            100 => Ok(Self::Continue),
+            _ => Err(()),
+        }
+    }
 }
 
 impl From<PheasantError> for Status {
@@ -251,6 +370,24 @@ pub enum Status {
     ServerError(ServerError),
 }
 
+impl TryFrom<u16> for Status {
+    type Error = ();
+
+    fn try_from(u: u16) -> Result<Self, Self::Error> {
+        if u < 200 {
+            <u16 as TryInto<Informational>>::try_into(u).map(|i| Self::Informational(i))
+        } else if u < 300 {
+            <u16 as TryInto<Successful>>::try_into(u).map(|s| Self::Successful(s))
+        } else if u < 400 {
+            <u16 as TryInto<Redirection>>::try_into(u).map(|re| Self::Redirection(re))
+        } else if u < 500 {
+            <u16 as TryInto<ClientError>>::try_into(u).map(|ce| Self::ClientError(ce))
+        } else {
+            <u16 as TryInto<ServerError>>::try_into(u).map(|se| Self::ServerError(se))
+        }
+    }
+}
+
 impl ResponseStatus for Status {
     fn text(&self) -> &str {
         match self {
@@ -296,29 +433,16 @@ impl ResponseStatus for ErrorStatus {
     }
 }
 
-// WARN this is very dangerous
-impl From<u16> for ErrorStatus {
-    fn from(u: u16) -> Self {
-        if u > 499 {
-            Self::Server(unsafe { std::mem::transmute::<u16, ServerError>(u) })
-        } else {
-            Self::Client(unsafe { std::mem::transmute::<u16, ClientError>(u) })
-        }
-    }
-}
+// WARN this is wrong
+// if u == unrecognizable variant repr, then this fn returns the highest u16 repr variant
+impl TryFrom<u16> for ErrorStatus {
+    type Error = ();
 
-impl From<u16> for Status {
-    fn from(code: u16) -> Self {
-        if code < 200 {
-            Self::Informational(unsafe { std::mem::transmute::<u16, Informational>(code) })
-        } else if code < 300 {
-            Self::Successful(unsafe { std::mem::transmute::<u16, Successful>(code) })
-        } else if code < 400 {
-            Self::Redirection(unsafe { std::mem::transmute::<u16, Redirection>(code) })
-        } else if code < 500 {
-            Self::ClientError(unsafe { std::mem::transmute::<u16, ClientError>(code) })
+    fn try_from(u: u16) -> Result<Self, Self::Error> {
+        if u < 500 {
+            <u16 as TryInto<ClientError>>::try_into(u).map(|ce| Self::Client(ce))
         } else {
-            Self::ServerError(unsafe { std::mem::transmute::<u16, ServerError>(code) })
+            <u16 as TryInto<ServerError>>::try_into(u).map(|se| Self::Server(se))
         }
     }
 }

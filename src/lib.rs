@@ -262,7 +262,7 @@ impl HeaderMap for HashMap<String, String> {
     where
         <H as std::str::FromStr>::Err: std::fmt::Debug,
     {
-        // TODO handle the error
+        // TODO handle the unwrap error case
         self.get(key).map(|s| s.parse::<H>().unwrap())
     }
 
