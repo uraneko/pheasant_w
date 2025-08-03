@@ -1,12 +1,12 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use chrono::offset::Utc;
 use mime::Mime;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::{
-    ClientError, Fail, Header, HeaderMap, PheasantError, PheasantResult, Protocol, Redirection,
-    Request, ResponseStatus, Server, ServerError, Service, Status, Successful,
+    ClientError, Cookie, Fail, Header, HeaderMap, PheasantError, PheasantResult, Protocol,
+    Redirection, Request, ResponseStatus, Server, ServerError, Service, Status, Successful,
 };
 
 const SERVER: &str = "Pheasant (dev/0.1.0)";
@@ -43,6 +43,7 @@ pub struct Response {
     body: Option<Vec<u8>>,
     headers: HashMap<String, String>,
     status: StatusState,
+    cookies: HashSet<Cookie>,
 }
 
 // impl Serialize for Response {
@@ -67,9 +68,7 @@ impl Response {
     pub fn template(proto: Protocol) -> Self {
         Self {
             proto,
-            headers: HashMap::new(),
-            body: None,
-            status: StatusState::default(),
+            ..Default::default()
         }
     }
 
@@ -123,10 +122,8 @@ impl Response {
     pub async fn not_implemented() -> Self {
         Self {
             status: StatusState::Status(Status::ServerError(ServerError::NotImplemented)),
-            body: Some(b"{ error: 'NotImplemented', code: 501 }".into()),
-            // TODO fill these headers
-            headers: HashMap::from([]),
-            proto: Protocol::HTTP1_1,
+            body: Some(b"{ error: 'NotImplemented', code: 501 }".to_vec()),
+            ..Default::default()
         }
     }
 
@@ -142,11 +139,31 @@ impl Response {
         );
         let mut iter = self.headers.into_iter();
         while let Some((ref h, ref v)) = iter.next() {
+            // NOTE this
+            // ```
+            // if h.starts_with("Set-Cookie") {
+            //     h.trim_end_matches(char::is_numeric)
+            // } else {
+            //     h
+            // }
+            // ```
+            // should be cheaper than storing the
+            // cookies in a vec (would require another allocation)
+            // RE: seems like http2 allows many Cookie headers
+            // a vec would just be a better representative of Cookie/Set-Cookie headers
             payload.push_str(h);
             payload.push_str(": ");
             payload.push_str(v);
             payload.push('\n');
         }
+
+        let mut iter = self.cookies.into_iter();
+        while let Some(cookie) = iter.next() {
+            payload.push_str("Set-Cookie: ");
+            payload.push_str(&cookie.to_string());
+            payload.push('\n');
+        }
+
         payload.push('\n');
         let mut payload = payload.into_bytes();
         if let Some(body) = self.body {
@@ -158,7 +175,7 @@ impl Response {
 }
 
 impl Response {
-    pub fn update_status(&mut self, status: Status, mime: Option<Mime>, route: &str) {
+    pub fn update_status(&mut self, status: Status, mime: Option<Mime>, route: &str) -> &mut Self {
         match status {
             Status::Informational(i) => (),
             Status::Successful(s) => self.successful(mime),
@@ -167,24 +184,45 @@ impl Response {
         }
 
         self.status = StatusState::Status(status);
+
+        self
     }
 
-    pub fn update_body(&mut self, data: Vec<u8>) {
+    pub fn update_body(&mut self, data: Vec<u8>) -> &mut Self {
         self.body = Some(data);
+
+        self
     }
 
     // updates mime type if it exists
     // returns bool indicating wether the update operation took place or not
-    pub fn update_mime(&mut self, mime: Option<&Mime>) -> bool {
-        let Some(mime) = mime else { return false };
+    pub fn update_mime(&mut self, mime: Option<&Mime>) -> &mut Self {
+        let Some(mime) = mime else { return self };
         // TODO fix header traits
         self.set_header::<Mime>("Content-Type", mime.clone());
 
-        true
+        self
     }
 
-    pub fn update_proto(&mut self, proto: Protocol) {
+    pub fn update_proto(&mut self, proto: Protocol) -> &mut Self {
         self.proto = proto;
+
+        self
+    }
+
+    pub fn set_cookie(&mut self, cookie: Cookie) -> &mut Self {
+        self.cookies.insert(cookie);
+
+        self
+    }
+
+    pub fn set_cookies<CI>(&mut self, cookies: CI) -> &mut Self
+    where
+        CI: Iterator<Item = Cookie>,
+    {
+        self.cookies.extend(cookies);
+
+        self
     }
 }
 
@@ -195,21 +233,21 @@ impl Response {
             *body = deflate::deflate_bytes_gzip(&body);
             let len = body.len();
 
-            self.set_header::<String>("Content-Encoding".into(), "deflate, gzip".into());
-            self.set_header("Content-Length".into(), len);
+            self.set_header::<String>("Content-Encoding".into(), "deflate, gzip".into())
+                .set_header("Content-Length".into(), len);
             if let Some(mime) = mime {
                 self.set_header("Content-Type", mime);
             }
-            self.set_header("Date".into(), Utc::now());
-            self.set_header::<String>("Server".into(), SERVER.into());
+            self.set_header("Date".into(), Utc::now())
+                .set_header::<String>("Server".into(), SERVER.into());
         }
     }
 
     // this doesnt need to be async
     // there is no system IO going on here
     fn redirection(&mut self, route: &str) {
-        self.set_header::<String>("Location".into(), route.into());
-        self.set_header("Content-Length".into(), 0);
+        self.set_header::<String>("Location".into(), route.into())
+            .set_header("Content-Length".into(), 0);
     }
 }
 
@@ -223,8 +261,10 @@ impl HeaderMap for Response {
         self.headers.header(key)
     }
 
-    fn set_header<H: Header>(&mut self, key: &str, h: H) -> Option<String> {
-        self.headers.set_header(key, h)
+    fn set_header<H: Header>(&mut self, key: &str, h: H) -> &mut Self {
+        self.headers.set_header(key, h);
+
+        self
     }
 }
 

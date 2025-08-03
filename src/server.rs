@@ -22,7 +22,7 @@ pub struct Server {
 
 // TODO Cookies ops
 // TODO CORS ops
-// WARN when responding to a credientialed request, the CORS glob/* header value is not allowed for the following headers
+// WARN when responding to a credentialed request, the CORS glob/* header value is not allowed for the following headers
 // Access-Control-Allow-Origin, Access-Control-Allow-Headers, Access-Control-Allow-Methods and Access-Control-Expose-Headers
 // TODO Server.origins { whitelist, blacklist }
 
@@ -65,18 +65,22 @@ impl Server {
     }
 
     /// pushes a new service to the server
-    pub fn service<S>(&mut self, s: S)
+    pub fn service<S>(&mut self, s: S) -> &mut Self
     where
         S: Fn() -> Service,
     {
         self.services.push(s());
+
+        self
     }
 
-    pub fn error<E>(&mut self, e: E)
+    pub fn error<E>(&mut self, e: E) -> &mut Self
     where
         E: Fn() -> Fail,
     {
         self.errors.push(e());
+
+        self
     }
 }
 

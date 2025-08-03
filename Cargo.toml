@@ -8,7 +8,7 @@ name = "dev"
 path = "src/main.rs"
 
 [dependencies]
-chrono = "0.4.41"
+chrono = { version = "0.4.41", features = ["serde"] }
 crossbeam-channel = "0.5.15"
 deflate = { version = "1.0.0", features = ["gzip"] }
 mime = "0.3.17"

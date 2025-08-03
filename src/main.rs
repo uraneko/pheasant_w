@@ -1,15 +1,16 @@
 use chrono::{DateTime, Utc};
 use pheasant_core::{
-    HeaderMap, Method, Protocol, Request, Response, Server, Service, error_code, get,
+    Cookie, HeaderMap, Method, Protocol, Request, Response, Server, Service, error_code, get,
 };
 
 #[tokio::main]
 async fn main() {
     let mut phe = Server::new([127, 0, 0, 1], 8883, 3333).unwrap();
-    phe.service(hello);
-    phe.service(favicon);
-    phe.error(not_found);
-    // phe.service(|| Service::new(Method::Get, "/icon", [], "image/svg+xml", svg));
+    phe.service(hello)
+        .service(favicon)
+        .error(not_found)
+        .service(|| Service::new(Method::Get, "/icon", [], "image/svg+xml", svg));
+
     phe.serve().await;
 }
 
@@ -47,7 +48,15 @@ async fn svg(who: Who, p: Protocol) -> Response {
         "Content-Type",
         "image/svg+xml".parse::<mime::Mime>().unwrap(),
     );
-    resp.update_body(std::fs::read_to_string(who.name).unwrap().into_bytes());
+
+    let mut cookie = Cookie::new("test1", "this test cookie should disappear in 1 mins");
+    cookie
+        .http_only(true)
+        .same_site(0)
+        .max_age(chrono::TimeDelta::minutes(1));
+
+    resp.update_body(std::fs::read_to_string(who.name).unwrap().into_bytes())
+        .set_cookie(cookie);
 
     resp
 }
@@ -62,10 +71,19 @@ async fn not_found() -> Response {
     let len = body.len();
     resp.update_body(body);
 
-    resp.set_header("Content-Type", "text/html".parse::<mime::Mime>().unwrap());
-    resp.set_header("Content-Length", len);
-    resp.set_header::<String>("Server", "Phe (devmode)".into());
-    resp.set_header("Date", Utc::now().to_string());
+    resp.set_header("Content-Type", "text/html".parse::<mime::Mime>().unwrap())
+        .set_header("Content-Length", len)
+        .set_header::<String>("Server", "Phe (devmode)".into())
+        .set_header("Date", Utc::now().to_string());
 
     resp
 }
+
+// TODO #[status(200)] macro attr
+// server wide preflight req resp
+// #[options("*")]
+// async fn server_options(_: ()) -> Response {
+//     let mut resp = Response::default();
+//
+//     resp
+// }

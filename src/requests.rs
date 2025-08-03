@@ -153,8 +153,10 @@ impl HeaderMap for Request {
         self.headers.get(key).map(|s| s.parse::<H>().unwrap())
     }
 
-    fn set_header<H: Header>(&mut self, key: &str, h: H) -> Option<String> {
-        self.headers.set_header(key, h)
+    fn set_header<H: Header>(&mut self, key: &str, h: H) -> &mut Self {
+        self.headers.set_header(key, h);
+
+        self
     }
 }
 

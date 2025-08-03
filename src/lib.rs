@@ -7,6 +7,7 @@ use std::string::FromUtf8Error;
 
 use mime::Mime;
 
+pub mod cookies;
 pub mod cors;
 pub mod fail;
 pub mod requests;
@@ -15,7 +16,7 @@ pub mod server;
 pub mod service;
 pub mod status;
 
-
+pub use cookies::Cookie;
 pub use fail::Fail;
 pub use requests::Request;
 pub use response::Response;
@@ -246,7 +247,7 @@ pub trait HeaderMap {
     /// let len = content.len();
     /// let maybe_old: Option<usize> = response.set_header("Content-Length", len);
     /// ```
-    fn set_header<H: Header>(&mut self, key: &str, h: H) -> Option<String>;
+    fn set_header<H: Header>(&mut self, key: &str, h: H) -> &mut Self;
 
     fn has_header<H: Header>(&self, key: &str) -> bool
     where
@@ -268,8 +269,10 @@ impl HeaderMap for HashMap<String, String> {
         self.get(key).map(|s| s.parse::<H>().unwrap())
     }
 
-    fn set_header<H: Header>(&mut self, key: &str, h: H) -> Option<String> {
-        self.insert(key.into(), h.to_string())
+    fn set_header<H: Header>(&mut self, key: &str, h: H) -> &mut Self {
+        self.insert(key.into(), h.to_string());
+
+        self
     }
 }
 
