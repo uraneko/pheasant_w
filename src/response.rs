@@ -5,7 +5,7 @@ use mime::Mime;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::{
-    ClientError, Cookie, Fail, Header, HeaderMap, PheasantError, PheasantResult, Protocol,
+    ClientError, Cookie, Cors, Fail, Header, HeaderMap, PheasantError, PheasantResult, Protocol,
     Redirection, Request, ResponseStatus, Server, ServerError, Service, Status, Successful,
 };
 
@@ -44,6 +44,7 @@ pub struct Response {
     headers: HashMap<String, String>,
     status: StatusState,
     cookies: HashSet<Cookie>,
+    cors: Option<Cors>,
 }
 
 // impl Serialize for Response {
@@ -162,6 +163,10 @@ impl Response {
             payload.push_str("Set-Cookie: ");
             payload.push_str(&cookie.to_string());
             payload.push('\n');
+        }
+
+        if let Some(cors) = self.cors {
+            payload.push_str(&cors.format());
         }
 
         payload.push('\n');

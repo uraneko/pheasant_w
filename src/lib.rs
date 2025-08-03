@@ -17,6 +17,7 @@ pub mod service;
 pub mod status;
 
 pub use cookies::Cookie;
+pub use cors::Cors;
 pub use fail::Fail;
 pub use requests::Request;
 pub use response::Response;

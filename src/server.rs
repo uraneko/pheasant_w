@@ -74,7 +74,7 @@ impl Server {
         self
     }
 
-    pub fn error<E>(&mut self, e: E) -> &mut Self
+    pub fn failure<E>(&mut self, e: E) -> &mut Self
     where
         E: Fn() -> Fail,
     {
