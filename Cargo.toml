@@ -1,0 +1,16 @@
+[package]
+name = "pheasant_uri"
+version = "0.1.0"
+edition = "2024"
+
+# [[test]]
+# name = "basic"
+# path = "tests/basic.rs"
+
+[[test]]
+name = "lex"
+path = "tests/lex.rs"
+
+[dependencies]
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.142"
