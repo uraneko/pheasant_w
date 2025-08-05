@@ -1,223 +1,455 @@
-use std::ops::RangeInclusive;
-pub struct Parser {}
+use std::collections::{HashMap, HashSet};
 
-pub struct Uri {
-    value: String,
-    kind: UriKind,
+use crate::{ParseError, Token, lex};
+
+#[derive(Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum Scheme {
+    Http,
+    Https,
+    Ws,
+    Wss,
+    File,
+    Ftp,
 }
 
-impl Uri {}
-
-pub enum UriKind {
-    // *
-    WildCard,
-    // full uri
-    Origin,
-    // standalone path
-    Path,
-    // IPv4
-    IPv4,
-    // IPv6
-    IPv6,
-    // email
-    Email,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum Token {
-    Word(String),
-    Number(String),
-    PercentEncoded(String),
-    WhiteSpace,
-    QuestionMark,
-    Pound,
-    Colon,
-    SemiColon,
-    Comma,
-    Dot,
-    Slash,
-    Percent,
-    Asterisk,
-    AddressSign,
-    Equality,
-    AmperSand,
-    Dollar,
-    SingleQuote,
-    PluSign,
-    LeftBracket,
-    RightBracket,
-    LeftParen,
-    RightParen,
-    ExclamationMark,
-}
-
-impl Token {
-    pub fn word<I>(i: I) -> Self
-    where
-        I: Iterator<Item = char>,
-    {
-        Self::Word(i.collect())
-    }
-
-    pub fn number<I>(i: I) -> Self
-    where
-        I: Iterator<Item = char>,
-    {
-        Self::Number(i.collect())
-    }
-}
-
-struct SyntaxTree {}
-
-macro_rules! token {
-    ($s: expr) => {
-        match $s {
-            '/' => Token::Slash,
-            ':' => Token::Colon,
-            ';' => Token::SemiColon,
-            ',' => Token::Comma,
-            '?' => Token::QuestionMark,
-            '!' => Token::ExclamationMark,
-            '#' => Token::Pound,
-            '%' => Token::Percent,
-            '*' => Token::Asterisk,
-            ' ' => Token::WhiteSpace,
-            '@' => Token::AddressSign,
-            '=' => Token::Equality,
-            '&' => Token::AmperSand,
-            '$' => Token::Dollar,
-            '\'' => Token::SingleQuote,
-            '+' => Token::PluSign,
-            '[' => Token::LeftBracket,
-            ']' => Token::RightBracket,
-            '(' => Token::LeftParen,
-            ')' => Token::RightParen,
-            '.' => Token::Dot,
-            _ => panic!("declmacro, unexpected char token value")
+impl std::str::FromStr for Scheme {
+    type Err = ParseError;
+    fn from_str(s: &str) -> ParseResult<Self> {
+        match s.to_uppercase().as_str() {
+            "HTTP" => Ok(Self::Http),
+            "HTTPS" => Ok(Self::Https),
+            "WS" => Ok(Self::Ws),
+            "WSS" => Ok(Self::Wss),
+            "FILE" => Ok(Self::File),
+            "FTP" => Ok(Self::Ftp),
+            _ => Err(ParseError::url(0).unwrap()),
         }
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Query {
+    params: HashMap<String, String>,
+    attrs: HashSet<String>,
+}
+
+impl Query {
+    fn insert_param(&mut self, k: &str, v: &str) {
+        self.params.insert(k.to_owned(), v.to_owned());
+    }
+
+    fn insert_attr(&mut self, a: &str) {
+        self.attrs.insert(a.to_owned());
+    }
+}
+
+impl Query {
+    fn from_colls(map: HashMap<&str, &str>, set: HashSet<&str>) -> Self {
+        Query {
+            params: map.into_iter().map(|(k, v)| (k.into(), v.into())).collect(),
+            attrs: set.into_iter().map(|a| a.into()).collect(),
+        }
+    }
+}
+
+impl std::str::FromStr for Query {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> ParseResult<Self> {
+        let mut query = Query::default();
+        str_to_pairs(&mut query, s);
+
+        Ok(query)
+    }
+}
+
+// parses the query params into key -> value pairs
+fn str_to_pairs(query: &mut Query, s: &str) {
+    s.split('&')
+        // BUG this crashes the server when uri query is badly formatted
+        // TODO scan query after getting request and return ClientError::BadRequest if query is faulty
+        .map(|e| str_to_pair(e))
+        .for_each(|[k, v]| {
+            if v.is_empty() {
+                query.insert_attr(k);
+            } else {
+                query.insert_param(k, v);
+            }
+        });
+}
+
+// NOTE this handles the pain points of parse_query
+// the check for `=` garentees the operation's success
+fn str_to_pair(p: &str) -> [&str; 2] {
+    if p.contains('=') {
+        p.splitn(2, '=').collect::<Vec<&str>>().try_into().unwrap()
+    } else {
+        // TODO possibly make a HashSet of bool params alongside the HashMap of k -> v pairs
+        [p, ""]
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SyntaxTree {
+    scheme: Option<Scheme>,
+    domain: Option<Vec<String>>,
+    port: Option<u16>,
+    path: Option<Vec<String>>,
+    query: Option<Query>,
+    fragment: Option<String>,
+}
+
+impl SyntaxTree {
+    fn update_scheme(&mut self, scheme: Option<Scheme>) {
+        self.scheme = scheme;
+    }
+
+    fn update_domain(&mut self, domain: Vec<String>) {
+        self.domain = Some(domain);
+    }
+
+    fn update_port(&mut self, port: u16) {
+        self.port = Some(port);
+    }
+
+    fn update_path(&mut self, path: Vec<String>) {
+        self.path = Some(path);
+    }
+
+    fn update_query(&mut self, query: Query) {
+        self.query = Some(query);
+    }
+
+    fn update_fragment(&mut self, frag: String) {
+        self.fragment = Some(frag);
+    }
+}
+
+type ParseResult<T> = Result<T, ParseError>;
+
+fn parse_init<I>(mut toks: I, mut url: SyntaxTree) -> ParseResult<SyntaxTree>
+where
+    I: Iterator<Item = Token>,
+{
+    match toks.next().unwrap() {
+        // either scheme... or path...
+        Token::Word(w) => {
+            let scheme = w.parse::<Scheme>().ok();
+            url.update_scheme(scheme);
+            if url.scheme.is_none() {
+                // parse_path_absolute
+                url.domain = None;
+
+                return parse_path_absolute(toks, url, w);
+            } else {
+                // parse_scheme_relative
+                let Some(Token::Colon) = toks.next() else {
+                    return Err(ParseError::url(0).unwrap());
+                };
+
+                return parse_scheme_relative(toks, url);
+            }
+        }
+        // either //{domain} or /{path}
+        Token::Slash => {
+            let next = toks.next().ok_or(ParseError::url(0).unwrap())?;
+            match next {
+                // //{domain}
+                Token::Slash => {
+                    return parse_scheme_relative(toks, url);
+                }
+                // /{path}
+                Token::Word(path) => {
+                    parse_path_absolute(toks, url, path);
+                }
+                _ => return Err(ParseError::url(0).unwrap()),
+            }
+        }
+        _ => panic!(),
+    }
+
+    todo!()
+}
+
+#[derive(Debug, Eq, PartialEq, Hash)]
+enum Last {
+    Sep,
+    Item,
+}
+
+// //{domain}{maybe path}
+fn parse_scheme_relative<I>(mut toks: I, mut url: SyntaxTree) -> ParseResult<SyntaxTree>
+where
+    I: Iterator<Item = Token>,
+{
+    let (Some(Token::Slash), Some(Token::Slash)) = (toks.next(), toks.next()) else {
+        return Err(ParseError::url(0).unwrap());
     };
-}
 
-const SYMBOLS: [char; 21] = [
-    '/', ':', ';', ',', '?', '!', '#', '%', '*', ' ', '@', '=', '&', '$', '\'', '+', '[', ']', '(',
-    ')', '.',
-];
-const DIGITS: RangeInclusive<char> = '0'..='9';
-const UC: RangeInclusive<char> = 'A'..='Z';
-const LC: RangeInclusive<char> = 'a'..='z';
-
-fn is_letter(ch: char) -> bool {
-    UC.contains(&ch) || LC.contains(&ch)
-}
-fn is_digit(ch: char) -> bool {
-    DIGITS.contains(&ch)
-}
-
-fn is_symbol(ch: char) -> bool {
-    SYMBOLS.contains(&ch)
-}
-
-fn group_letters_and_push_tok<I>(
-    chars: &mut I,
-    group: &mut Vec<char>,
-    toks: &mut Vec<Token>,
-) -> Option<char>
-where
-    I: Iterator<Item = char>,
-{
-    while let Some(letter) = chars.next() {
-        if !is_letter(letter) {
-            let tok = Token::word(group.drain(..));
-            toks.push(tok);
-
-            match letter {
-                digit if is_digit(digit) => {
-                    group.push(digit);
-                    group_digits_and_push_tok(chars, group, toks);
+    let mut domain = Vec::new();
+    let mut last = Last::Item;
+    while let Some(t) = toks.next() {
+        match t {
+            Token::Word(d) => {
+                if last == Last::Item && !domain.is_empty() {
+                    return Err(ParseError::url(0).unwrap());
                 }
-                sym if is_symbol(sym) => return Some(sym),
-                _ => panic!("matching token after exiting word, got unexpected token kind"),
+                domain.push(d);
+                last = Last::Item;
             }
-        }
-
-        group.push(letter);
-    }
-    // if this word token is the last token in the input
-    // then we shouldnt forget to push it into toks
-    let tok = Token::word(group.drain(..));
-    toks.push(tok);
-
-    None
-}
-
-fn group_digits_and_push_tok<I>(
-    chars: &mut I,
-    group: &mut Vec<char>,
-    toks: &mut Vec<Token>,
-) -> Option<char>
-where
-    I: Iterator<Item = char>,
-{
-    while let Some(digit) = chars.next() {
-        if !is_digit(digit) {
-            let tok = Token::number(group.drain(..));
-            toks.push(tok);
-
-            match digit {
-                letter if is_letter(letter) => {
-                    group.push(letter);
-                    group_letters_and_push_tok(chars, group, toks);
+            Token::Dot => {
+                if last == Last::Sep {
+                    return Err(ParseError::url(0).unwrap());
                 }
-                sym if is_symbol(sym) => return Some(sym),
-                _ => panic!("matching token after exiting number, got unexpected token kind"),
+                last = Last::Sep;
             }
-        }
-
-        group.push(digit);
-    }
-    // if this number token is the last token in the input
-    // then we shouldnt forget to push it into toks
-    let tok = Token::number(group.drain(..));
-    toks.push(tok);
-
-    None
-}
-
-fn match_tok_after_word(t: char) {}
-fn match_tok_after_number(t: char) {}
-
-pub fn lex(s: &str) -> Vec<Token> {
-    let mut chars = s.chars();
-    let mut toks = vec![];
-    let mut group = vec![];
-    while let Some(ch) = chars.next() {
-        match ch {
-            sym if is_symbol(sym) => toks.push(token!(sym)),
-
-            letter if is_letter(letter) => {
-                group.push(letter);
-                let tok = group_letters_and_push_tok(&mut chars, &mut group, &mut toks);
-                let Some(tok) = tok else { return toks };
-                toks.push(token!(tok));
+            Token::Colon => {
+                if last == Last::Sep {
+                    return Err(ParseError::url(0).unwrap());
+                }
+                // port is next
+                url.update_domain(domain);
+                return parse_port(toks, url);
             }
-
-            digit if is_digit(digit) => {
-                group.push(digit);
-                let tok = group_digits_and_push_tok(&mut chars, &mut group, &mut toks);
-                let Some(tok) = tok else { return toks };
-                toks.push(token!(tok));
+            Token::Slash => {
+                if last == Last::Sep {
+                    return Err(ParseError::url(0).unwrap());
+                }
+                // path is next
+                url.update_domain(domain);
+                return parse_path(toks, url);
             }
-            err => panic!("lex(): didnt expect this token: `{}`", err),
+            _ => return Err(ParseError::url(0).unwrap()),
         }
     }
+    url.update_domain(domain);
 
-    toks
+    Ok(url)
 }
 
-fn parse() -> SyntaxTree {
-    todo!()
+// /{path}
+fn parse_path_absolute<I>(mut toks: I, mut url: SyntaxTree, p: String) -> ParseResult<SyntaxTree>
+where
+    I: Iterator<Item = Token>,
+{
+    let mut path = Vec::default();
+    path.push(p);
+    let mut last = Last::Item;
+    while let Some(t) = toks.next() {
+        match t {
+            Token::Word(s) => {
+                if last == Last::Item {
+                    return Err(ParseError::url(0).unwrap());
+                }
+                path.push(s);
+                last = Last::Item;
+            }
+            Token::Slash => {
+                if last == Last::Sep {
+                    return Err(ParseError::url(0).unwrap());
+                }
+                last = Last::Sep;
+            }
+            Token::QuestionMark => {
+                if last == Last::Sep {
+                    return Err(ParseError::url(0).unwrap());
+                }
+                // query is next
+                url.update_path(path);
+                return parse_query(toks, url);
+            }
+            Token::Pound => {
+                if last == Last::Sep {
+                    return Err(ParseError::url(0).unwrap());
+                }
+                url.update_path(path);
+                return parse_fragment(toks, url);
+            }
+            _ => return Err(ParseError::url(0).unwrap()),
+        }
+    }
+    url.update_path(path);
+
+    Ok(url)
 }
 
-fn interpret() -> Uri {
-    todo!()
+fn parse_path<I>(mut toks: I, mut url: SyntaxTree) -> ParseResult<SyntaxTree>
+where
+    I: Iterator<Item = Token>,
+{
+    let mut path = Vec::default();
+    let mut last = Last::Sep;
+    while let Some(t) = toks.next() {
+        match t {
+            Token::Word(s) => {
+                if last == Last::Item {
+                    return Err(ParseError::url(0).unwrap());
+                }
+                path.push(s);
+                last = Last::Item;
+            }
+            Token::Slash => {
+                if last == Last::Sep && !path.is_empty() {
+                    return Err(ParseError::url(0).unwrap());
+                }
+                last = Last::Sep;
+            }
+            Token::QuestionMark => {
+                if last == Last::Sep {
+                    return Err(ParseError::url(0).unwrap());
+                }
+                // query is next
+                url.update_path(path);
+                return parse_query(toks, url);
+            }
+            Token::Pound => {
+                if last == Last::Sep {
+                    return Err(ParseError::url(0).unwrap());
+                }
+                url.update_path(path);
+                return parse_fragment(toks, url);
+            }
+            _ => return Err(ParseError::url(0).unwrap()),
+        }
+    }
+    url.update_path(path);
+
+    Ok(url)
+}
+
+fn parse_port<I>(mut toks: I, mut url: SyntaxTree) -> ParseResult<SyntaxTree>
+where
+    I: Iterator<Item = Token>,
+{
+    let Some(Token::Number(num)) = toks.next() else {
+        return Err(ParseError::url(0).unwrap());
+    };
+
+    let Ok(port) = num.parse::<u16>() else {
+        return Err(ParseError::url(7).unwrap());
+    };
+    url.update_port(port);
+
+    if let Some(t) = toks.next() {
+        match t {
+            Token::Slash => {
+                // path
+                return parse_path(toks, url);
+            }
+            Token::QuestionMark => {
+                // query
+                return parse_query(toks, url);
+            }
+            Token::Pound => {
+                // fragment
+                return parse_fragment(toks, url);
+            }
+            _ => Err(ParseError::url(0).unwrap()),
+        }
+    } else {
+        return Ok(url);
+    }
+}
+
+fn parse_query<I>(mut toks: I, mut url: SyntaxTree) -> ParseResult<SyntaxTree>
+where
+    I: Iterator<Item = Token>,
+{
+    let mut temp = String::new();
+    while let Some(t) = toks.next() {
+        if t == Token::Pound {
+            let query = temp.parse::<Query>()?;
+            url.update_query(query);
+            return parse_fragment(toks, url);
+        }
+
+        temp.push_str(t.as_str());
+    }
+    let query = temp.parse::<Query>()?;
+    url.update_query(query);
+
+    Ok(url)
+}
+
+fn parse_fragment<I>(mut toks: I, mut url: SyntaxTree) -> ParseResult<SyntaxTree>
+where
+    I: Iterator<Item = Token>,
+{
+    let mut frag = String::new();
+    while let Some(t) = toks.next() {
+        frag.push_str(t.as_str());
+    }
+    url.update_fragment(frag);
+
+    // fragment comes at the end so we're done
+    Ok(url)
+}
+
+fn parse_url<I>(toks: I) -> ParseResult<SyntaxTree>
+where
+    I: Iterator<Item = Token>,
+{
+    let url = SyntaxTree::default();
+
+    parse_init(toks, url)
+}
+
+impl std::str::FromStr for SyntaxTree {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> ParseResult<Self> {
+        let toks = lex(s);
+
+        parse_url(toks.into_iter())
+    }
+}
+
+impl SyntaxTree {
+    fn path_absolute(
+        path: Vec<&str>,
+        query: Option<(HashMap<&str, &str>, HashSet<&str>)>,
+        fragment: Option<String>,
+    ) -> Self {
+        Self {
+            path: Some(path.into_iter().map(|s| s.into()).collect()),
+            query: query.map(|(params, attrs)| Query::from_colls(params, attrs)),
+            fragment,
+            ..Default::default()
+        }
+    }
+
+    fn scheme_relative(
+        domain: Vec<String>,
+        port: Option<u16>,
+        path: Option<Vec<String>>,
+        query: Option<(HashMap<&str, &str>, HashSet<&str>)>,
+        fragment: Option<String>,
+    ) -> Self {
+        Self {
+            domain: Some(domain),
+            port,
+            path,
+            query: query.map(|(params, attrs)| Query::from_colls(params, attrs)),
+            fragment,
+            ..Default::default()
+        }
+    }
+
+    fn absolute(
+        scheme: Scheme,
+        domain: Vec<String>,
+        port: Option<u16>,
+        path: Option<Vec<String>>,
+        query: Option<(HashMap<&str, &str>, HashSet<&str>)>,
+        fragment: Option<String>,
+    ) -> Self {
+        Self {
+            domain: Some(domain),
+            port,
+            path,
+            query: query.map(|(params, attrs)| Query::from_colls(params, attrs)),
+            fragment,
+            scheme: Some(scheme),
+        }
+    }
 }
