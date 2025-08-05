@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{ParseError, Token, lex};
 
-#[derive(Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Scheme {
     Http,
     Https,
@@ -27,7 +27,7 @@ impl std::str::FromStr for Scheme {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Query {
     params: HashMap<String, String>,
     attrs: HashSet<String>,
@@ -40,6 +40,14 @@ impl Query {
 
     fn insert_attr(&mut self, a: &str) {
         self.attrs.insert(a.to_owned());
+    }
+
+    pub fn params(&self) -> &HashMap<String, String> {
+        &self.params
+    }
+
+    pub fn attrs(&self) -> &HashSet<String> {
+        &self.attrs
     }
 }
 
@@ -89,8 +97,8 @@ fn str_to_pair(p: &str) -> [&str; 2] {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct SyntaxTree {
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Url {
     scheme: Option<Scheme>,
     domain: Option<Vec<String>>,
     port: Option<u16>,
@@ -99,7 +107,7 @@ pub struct SyntaxTree {
     fragment: Option<String>,
 }
 
-impl SyntaxTree {
+impl Url {
     fn update_scheme(&mut self, scheme: Option<Scheme>) {
         self.scheme = scheme;
     }
@@ -127,7 +135,7 @@ impl SyntaxTree {
 
 type ParseResult<T> = Result<T, ParseError>;
 
-fn parse_init<I>(mut toks: I, mut url: SyntaxTree) -> ParseResult<SyntaxTree>
+fn parse_init<I>(mut toks: I, mut url: Url) -> ParseResult<Url>
 where
     I: Iterator<Item = Token>,
 {
@@ -178,7 +186,7 @@ enum Last {
 }
 
 // //{domain}{maybe path}
-fn parse_scheme_relative<I>(mut toks: I, mut url: SyntaxTree) -> ParseResult<SyntaxTree>
+fn parse_scheme_relative<I>(mut toks: I, mut url: Url) -> ParseResult<Url>
 where
     I: Iterator<Item = Token>,
 {
@@ -228,7 +236,7 @@ where
 }
 
 // /{path}
-fn parse_path_absolute<I>(mut toks: I, mut url: SyntaxTree, p: String) -> ParseResult<SyntaxTree>
+fn parse_path_absolute<I>(mut toks: I, mut url: Url, p: String) -> ParseResult<Url>
 where
     I: Iterator<Item = Token>,
 {
@@ -273,7 +281,7 @@ where
     Ok(url)
 }
 
-fn parse_path<I>(mut toks: I, mut url: SyntaxTree) -> ParseResult<SyntaxTree>
+fn parse_path<I>(mut toks: I, mut url: Url) -> ParseResult<Url>
 where
     I: Iterator<Item = Token>,
 {
@@ -317,7 +325,7 @@ where
     Ok(url)
 }
 
-fn parse_port<I>(mut toks: I, mut url: SyntaxTree) -> ParseResult<SyntaxTree>
+fn parse_port<I>(mut toks: I, mut url: Url) -> ParseResult<Url>
 where
     I: Iterator<Item = Token>,
 {
@@ -351,7 +359,7 @@ where
     }
 }
 
-fn parse_query<I>(mut toks: I, mut url: SyntaxTree) -> ParseResult<SyntaxTree>
+fn parse_query<I>(mut toks: I, mut url: Url) -> ParseResult<Url>
 where
     I: Iterator<Item = Token>,
 {
@@ -371,7 +379,7 @@ where
     Ok(url)
 }
 
-fn parse_fragment<I>(mut toks: I, mut url: SyntaxTree) -> ParseResult<SyntaxTree>
+fn parse_fragment<I>(mut toks: I, mut url: Url) -> ParseResult<Url>
 where
     I: Iterator<Item = Token>,
 {
@@ -385,16 +393,16 @@ where
     Ok(url)
 }
 
-fn parse_url<I>(toks: I) -> ParseResult<SyntaxTree>
+fn parse_url<I>(toks: I) -> ParseResult<Url>
 where
     I: Iterator<Item = Token>,
 {
-    let url = SyntaxTree::default();
+    let url = Url::default();
 
     parse_init(toks, url)
 }
 
-impl std::str::FromStr for SyntaxTree {
+impl std::str::FromStr for Url {
     type Err = ParseError;
 
     fn from_str(s: &str) -> ParseResult<Self> {
@@ -404,8 +412,8 @@ impl std::str::FromStr for SyntaxTree {
     }
 }
 
-impl SyntaxTree {
-    fn path_absolute(
+impl Url {
+    pub fn path_absolute(
         path: Vec<&str>,
         query: Option<(HashMap<&str, &str>, HashSet<&str>)>,
         fragment: Option<String>,
@@ -418,7 +426,7 @@ impl SyntaxTree {
         }
     }
 
-    fn scheme_relative(
+    pub fn scheme_relative(
         domain: Vec<String>,
         port: Option<u16>,
         path: Option<Vec<String>>,
@@ -435,7 +443,7 @@ impl SyntaxTree {
         }
     }
 
-    fn absolute(
+    pub fn absolute(
         scheme: Scheme,
         domain: Vec<String>,
         port: Option<u16>,
@@ -451,5 +459,47 @@ impl SyntaxTree {
             fragment,
             scheme: Some(scheme),
         }
+    }
+}
+
+impl Url {
+    pub fn scheme(&self) -> Option<Scheme> {
+        self.scheme
+    }
+
+    pub fn take_domain(&mut self) -> Option<Vec<String>> {
+        let Some(ref mut domain) = self.domain else {
+            return None;
+        };
+
+        Some(std::mem::take(domain))
+    }
+
+    pub fn port(&self) -> Option<u16> {
+        self.port
+    }
+
+    pub fn take_path(&mut self) -> Option<Vec<String>> {
+        let Some(ref mut path) = self.path else {
+            return None;
+        };
+
+        Some(std::mem::take(path))
+    }
+
+    pub fn take_query(&mut self) -> Option<Query> {
+        let Some(ref mut query) = self.query else {
+            return None;
+        };
+
+        Some(std::mem::take(query))
+    }
+
+    pub fn take_fragment(&mut self) -> Option<String> {
+        let Some(ref mut fragment) = self.fragment else {
+            return None;
+        };
+
+        Some(std::mem::take(fragment))
     }
 }
