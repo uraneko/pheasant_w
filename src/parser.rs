@@ -1,6 +1,8 @@
+use serde::de::{Deserialize, Deserializer, Error, Visitor};
+use serde::ser::{Serialize, SerializeTupleStruct, Serializer};
 use std::collections::{HashMap, HashSet};
 
-use crate::{ParseError, Token, lex};
+use crate::{ParseError, ParseResult, Query, lex, lexer::Token};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Scheme {
@@ -10,6 +12,19 @@ pub enum Scheme {
     Wss,
     File,
     Ftp,
+}
+
+impl Scheme {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Http => "http",
+            Self::Https => "https",
+            Self::Ws => "ws",
+            Self::Wss => "wss",
+            Self::File => "file",
+            Self::Ftp => "ftp",
+        }
+    }
 }
 
 impl std::str::FromStr for Scheme {
@@ -27,77 +42,7 @@ impl std::str::FromStr for Scheme {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct Query {
-    params: HashMap<String, String>,
-    attrs: HashSet<String>,
-}
-
-impl Query {
-    fn insert_param(&mut self, k: &str, v: &str) {
-        self.params.insert(k.to_owned(), v.to_owned());
-    }
-
-    fn insert_attr(&mut self, a: &str) {
-        self.attrs.insert(a.to_owned());
-    }
-
-    pub fn params(&self) -> &HashMap<String, String> {
-        &self.params
-    }
-
-    pub fn attrs(&self) -> &HashSet<String> {
-        &self.attrs
-    }
-}
-
-impl Query {
-    fn from_colls(map: HashMap<&str, &str>, set: HashSet<&str>) -> Self {
-        Query {
-            params: map.into_iter().map(|(k, v)| (k.into(), v.into())).collect(),
-            attrs: set.into_iter().map(|a| a.into()).collect(),
-        }
-    }
-}
-
-impl std::str::FromStr for Query {
-    type Err = ParseError;
-
-    fn from_str(s: &str) -> ParseResult<Self> {
-        let mut query = Query::default();
-        str_to_pairs(&mut query, s);
-
-        Ok(query)
-    }
-}
-
-// parses the query params into key -> value pairs
-fn str_to_pairs(query: &mut Query, s: &str) {
-    s.split('&')
-        // BUG this crashes the server when uri query is badly formatted
-        // TODO scan query after getting request and return ClientError::BadRequest if query is faulty
-        .map(|e| str_to_pair(e))
-        .for_each(|[k, v]| {
-            if v.is_empty() {
-                query.insert_attr(k);
-            } else {
-                query.insert_param(k, v);
-            }
-        });
-}
-
-// NOTE this handles the pain points of parse_query
-// the check for `=` garentees the operation's success
-fn str_to_pair(p: &str) -> [&str; 2] {
-    if p.contains('=') {
-        p.splitn(2, '=').collect::<Vec<&str>>().try_into().unwrap()
-    } else {
-        // TODO possibly make a HashSet of bool params alongside the HashMap of k -> v pairs
-        [p, ""]
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Url {
     scheme: Option<Scheme>,
     domain: Option<Vec<String>>,
@@ -133,8 +78,6 @@ impl Url {
     }
 }
 
-type ParseResult<T> = Result<T, ParseError>;
-
 fn parse_init<I>(mut toks: I, mut url: Url) -> ParseResult<Url>
 where
     I: Iterator<Item = Token>,
@@ -168,15 +111,13 @@ where
                 }
                 // /{path}
                 Token::Word(path) => {
-                    parse_path_absolute(toks, url, path);
+                    return parse_path_absolute(toks, url, path);
                 }
                 _ => return Err(ParseError::url(0).unwrap()),
             }
         }
         _ => panic!(),
     }
-
-    todo!()
 }
 
 #[derive(Debug, Eq, PartialEq, Hash)]
@@ -460,6 +401,44 @@ impl Url {
             scheme: Some(scheme),
         }
     }
+
+    pub fn sequence(&self) -> String {
+        let scheme = self
+            .scheme
+            .map(|s| format!("{}://", s.as_str()))
+            .unwrap_or("".to_owned());
+
+        let mut domain = if let Some(ref domain) = self.domain {
+            let mut domain = domain.into_iter().fold(scheme, |acc, d| acc + d + ".");
+            domain.pop();
+
+            domain
+        } else {
+            scheme
+        };
+
+        if let Some(port) = self.port {
+            domain.push_str(&format!(":{}", port));
+        }
+
+        let mut path = if let Some(ref path) = self.path {
+            path.into_iter().fold(domain, |acc, s| acc + "/" + s)
+        } else {
+            domain
+        };
+
+        if let Some(ref query) = self.query.as_ref().map(|q| q.sequence()) {
+            path.push('?');
+            path.push_str(query);
+        }
+
+        if let Some(ref fragment) = self.fragment {
+            path.push('#');
+            path.push_str(fragment);
+        }
+
+        path
+    }
 }
 
 impl Url {
@@ -501,5 +480,125 @@ impl Url {
         };
 
         Some(std::mem::take(fragment))
+    }
+}
+
+// serde traits
+impl serde::Serialize for Url {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.sequence())
+    }
+}
+
+struct UrlVisitor;
+
+impl<'de> Visitor<'de> for UrlVisitor {
+    type Value = Url;
+
+    fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("expected str value of a url query")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        let url = v
+            .parse::<Url>()
+            .map_err(|_| E::custom("invalid str value"))?;
+
+        Ok(url)
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        let url = v
+            .parse::<Url>()
+            .map_err(|_| E::custom("invalid str value"))?;
+
+        Ok(url)
+    }
+
+    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        let url = v
+            .parse::<Url>()
+            .map_err(|_| E::custom("invalid str value"))?;
+
+        Ok(url)
+    }
+
+    fn visit_bytes<E>(self, b: &[u8]) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        let s = str::from_utf8(b).map_err(|_| E::custom("invalid bytes"))?;
+
+        let url = s
+            .parse::<Url>()
+            .map_err(|_| E::custom("invalid str value"))?;
+
+        Ok(url)
+    }
+
+    fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        let s = str::from_utf8(v).map_err(|_| E::custom("invalid bytes"))?;
+
+        let url = s
+            .parse::<Url>()
+            .map_err(|_| E::custom("invalid str value"))?;
+
+        Ok(url)
+    }
+
+    fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        let s = str::from_utf8(&v).map_err(|_| E::custom("invalid bytes"))?;
+
+        let url = s
+            .parse::<Url>()
+            .map_err(|_| E::custom("invalid str value"))?;
+
+        Ok(url)
+    }
+
+    // this means that none values would deserialize to mime default
+    // fn visit_none<E>(self) -> Result<Self::Value, E>
+    // where
+    //     E: Error,
+    // {
+    //     Ok(Mime::default())
+    // }
+
+    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_option(UrlVisitor)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Url {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_struct(
+            "Url",
+            &["scheme", "domain", "port", "path", "query", "fragment"],
+            UrlVisitor,
+        )
     }
 }

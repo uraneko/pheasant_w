@@ -5,6 +5,8 @@ pub enum ParseError {
     Url(URLError),
 }
 
+pub type ParseResult<T> = Result<T, ParseError>;
+
 impl ParseError {
     pub fn idna(repr: u8) -> Result<Self, ()> {
         if repr > 2 {
