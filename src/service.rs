@@ -1,6 +1,7 @@
 use std::pin::Pin;
 
-use crate::{Cors, IntoRoutes, Method, Mime, Protocol, Request, Response, Route};
+use crate::{Cors, IntoRoutes, Method, Mime, Protocol, Request, Response};
+use pheasant_uri::Route;
 
 /// a http server service type
 /// contains the logic that gets executed when a request is made
@@ -50,6 +51,7 @@ impl Service {
     ///
     pub fn new<F, I, O, R>(
         method: Method,
+        // TODO convert str to route at the macro level before getting here
         route: &str,
         redirects: I,
         mime: &str,
@@ -64,7 +66,7 @@ impl Service {
     {
         Self {
             method,
-            route: route.into(),
+            route: serde_json::from_str(&route).unwrap(),
             redirects: redirects.into_routes(),
             mime: mime.parse().ok(),
             cors,
@@ -88,9 +90,9 @@ impl Service {
         self.method
     }
 
-    // returns a reference to the String value of the service route
-    pub(crate) fn route(&self) -> &str {
-        &self.route.0
+    /// returns a reference to the String value of the service route
+    pub fn route(&self) -> &str {
+        &self.route
     }
 
     // returns a ref to the Mime type if it was provided
@@ -110,5 +112,10 @@ impl Service {
 
     pub(crate) fn cors(&self) -> Option<&Cors> {
         self.cors.as_ref()
+    }
+
+    /// checks if this service can handle cross origin requests
+    pub fn allows_cross_origin_requests(&self) -> bool {
+        self.cors.is_some()
     }
 }

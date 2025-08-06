@@ -47,6 +47,7 @@ pub struct Response {
 
 impl Response {
     /// generates a new Response template from a protocol value
+    // NOTE this should be called `with_proto`
     pub fn template(proto: Protocol) -> Self {
         Self {
             proto,
@@ -64,6 +65,10 @@ impl Response {
     ///
     /// dont use this directly
     // NOTE &Service contains the function that returns the Response template
+    // NOTE any data that is not stored in the Response type has to be set for the response at this
+    // point
+    // otherwise, data that is stored in the Response type can be injected into the response
+    // bytes inside the Response.respond method
     pub async fn payload(req: Request, status: Status, service: &Service) -> Self {
         let mime = mime(&req, service);
 
@@ -99,7 +104,7 @@ impl Response {
         let mut resp = (fail.fail())().await;
         resp.update_mime(fail.mime());
         resp.update_status(fail.code().try_into().unwrap(), None, "");
-        resp.update_proto(proto.unwrap_or(Protocol::default()));
+        resp.update_proto(proto.unwrap_or_default());
 
         Ok(resp)
     }
@@ -237,7 +242,7 @@ impl Response {
     pub fn set_cors(&mut self, req: &Request, service: &Service) -> &mut Self {
         if let Some(cors) = service.cors()
             && let Some(origin) = req.header::<Origin>("Origin")
-            && cors.allows_origin(origin.as_str())
+            && cors.allows_origin(&origin)
         {
             // allow requesting origin
             self.set_header("Access-Control-Allow-Origin", origin.to_owned());

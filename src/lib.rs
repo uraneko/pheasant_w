@@ -1,8 +1,11 @@
 // #![allow(unused_imports)]
 // #![allow(dead_code)]
 // #![allow(unused_variables)]
+use std::str::FromStr;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
+
+use pheasant_uri::Route;
 
 // NOTE indefinitely experimental
 mod monopoly;
@@ -80,17 +83,6 @@ impl From<url::ParseError> for PheasantError {
     }
 }
 
-/// uri route type,
-/// e.g., "/index.html"
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
-pub struct Route(String);
-
-impl Route {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
 /// used for service redirections generations
 pub trait IntoRoutes {
     /// consumes self and returns the routes
@@ -112,7 +104,11 @@ macro_rules! impl_into_routes {
         $(
             impl IntoRoutes for $t {
                 fn into_routes(self) -> Vec<Route> {
-                    self.into_iter().map(|r| (*r).into()).collect()
+                    self.into_iter().map(|r|
+                    serde_json::from_str(r).unwrap()
+
+
+        ).collect()
                 }
             }
         )*
@@ -141,37 +137,13 @@ where
 
 impl<'a> IntoRoutes for &'a str {
     fn into_routes(self: &'a str) -> Vec<Route> {
-        vec![self.into()]
+        vec![serde_json::from_str(self).unwrap()]
     }
 }
 
 impl IntoRoutes for String {
     fn into_routes(self: String) -> Vec<Route> {
-        vec![self.into()]
-    }
-}
-
-impl From<String> for Route {
-    fn from(s: String) -> Self {
-        let s = if !s.starts_with('/') {
-            format!("/{}", s)
-        } else {
-            s
-        };
-
-        Self(s)
-    }
-}
-
-impl From<&str> for Route {
-    fn from(s: &str) -> Self {
-        let s = if !s.starts_with('/') && s != "*" {
-            format!("/{}", s)
-        } else {
-            s.to_string()
-        };
-
-        Self(s)
+        vec![serde_json::from_str(&self).unwrap()]
     }
 }
 
@@ -247,6 +219,25 @@ impl TryFrom<&str> for Method {
     }
 }
 
+impl FromStr for Method {
+    type Err = PheasantError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "HEAD" => Ok(Self::Head),
+            "GET" => Ok(Self::Get),
+            "POST" => Ok(Self::Post),
+            "PUT" => Ok(Self::Put),
+            "PATCH" => Ok(Self::Patch),
+            "DELETE" => Ok(Self::Delete),
+            "CONNECT" => Ok(Self::Connect),
+            "OPTIONS" => Ok(Self::Options),
+            "TRACE" => Ok(Self::Trace),
+            _ => Err(Self::Err::ClientError(ClientError::BadRequest)),
+        }
+    }
+}
+
 /// Http protocol version
 ///
 /// currently only http 1.1 is supported
@@ -293,6 +284,20 @@ impl TryFrom<&str> for Protocol {
                 ServerError::HTTPVersionNotSupported,
             )),
             _ => Err(Self::Error::ClientError(ClientError::BadRequest)),
+        }
+    }
+}
+
+impl FromStr for Protocol {
+    type Err = PheasantError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "HTTP/1.1" => Ok(Self::HTTP1_1),
+            "HTTP/2" | "HTTP/3" => {
+                Err(Self::Err::ServerError(ServerError::HTTPVersionNotSupported))
+            }
+            _ => Err(Self::Err::ClientError(ClientError::BadRequest)),
         }
     }
 }

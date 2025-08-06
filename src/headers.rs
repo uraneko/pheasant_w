@@ -36,7 +36,7 @@ pub trait HeaderMap {
 impl HeaderMap for HashMap<String, String> {
     fn header<H: Header>(&self, key: &str) -> Option<H> {
         // TODO handle the unwrap error case
-        self.get(key).map(|s| <H as Header>::from_str(s))
+        self.get(key).map(|s| H::from_str(s))
     }
 
     fn set_header<H: Header>(&mut self, key: &str, h: H) -> &mut Self {
