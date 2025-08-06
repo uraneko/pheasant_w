@@ -2,9 +2,8 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
 use std::net::TcpStream;
 
-use super::{
-    ClientError, Header, HeaderMap, Method, PheasantError, PheasantResult, Protocol, Route,
-};
+use super::{ClientError, Header, HeaderMap, Method, PheasantError, PheasantResult, Protocol};
+use pheasant_uri::{Query, Resource, Route};
 
 /// HTTP Request type
 /// used in services to generate service input type; R: From<Request>
@@ -13,7 +12,7 @@ pub struct Request {
     method: Method,
     proto: Protocol,
     route: Route,
-    query: Option<HashMap<String, String>>,
+    query: Option<Query>,
     body: Option<String>,
     headers: HashMap<String, String>,
 }
@@ -29,7 +28,8 @@ impl Request {
         let mut reader = BufReader::new(stream);
         // if error we return 400 bad request
         _ = read_req_line(&mut v, &mut reader)?;
-        let (method, route, query, proto) = parse_req_line(&mut v.drain(..))?;
+        let (method, mut resource, proto) = parse_req_line(&mut v.drain(..))?;
+        let (route, query) = (resource.take_route(), resource.take_query());
         println!("parsed req line");
 
         let headers = read_parse_headers(&mut v, &mut reader)?;
@@ -62,19 +62,21 @@ impl Request {
 
     /// returns a reference `&str` of this request's route value
     pub fn route(&self) -> &str {
-        &self.route.0
+        // WARN this uses Deref
+        &self.route
     }
 
     /// returns this request's route value String
     /// doesn't clone, uses std::mem::take
     /// Note that the original request route value becomes String::new() once this is used
     pub fn take_route(&mut self) -> String {
-        std::mem::take(&mut self.route).0
+        // WARN this uses DerefMut
+        std::mem::take(&mut self.route)
     }
 
     /// if the request has a query, this returns a reference to it,
     /// otherwise, returns `None`
-    pub fn query(&mut self) -> Option<&HashMap<String, String>> {
+    pub fn query(&mut self) -> Option<&Query> {
         self.query.as_ref()
     }
 
@@ -86,21 +88,21 @@ impl Request {
     /// returns a reference to the param in the request query if both exist
     /// Otherwise, returns `None`
     pub fn param(&self, key: &str) -> Option<&str> {
-        let Some(ref map) = self.query else {
+        let Some(ref query) = self.query else {
             return None;
         };
 
-        map.get(key).map(|s| s.as_str())
+        query.param(key)
     }
 
     /// returns a bool indicating wether this request's query
     /// contains a param named `key`
-    pub fn has_param(&self, key: &str) -> bool {
-        let Some(ref map) = self.query else {
+    pub fn contains_param(&self, key: &str) -> bool {
+        let Some(ref query) = self.query else {
             return false;
         };
 
-        map.contains_key(key)
+        query.contains_param(key)
     }
 
     // pub fn parse_query(&self) -> HashMap<&str, &str> {
@@ -163,7 +165,7 @@ fn read_req_line(v: &mut Vec<u8>, s: &mut BufReader<&mut TcpStream>) -> Pheasant
 
 fn parse_req_line(
     bytes: &mut impl Iterator<Item = u8>,
-) -> Result<(Method, Route, Option<HashMap<String, String>>, Protocol), PheasantError> {
+) -> Result<(Method, Resource, Protocol), PheasantError> {
     let mut val = vec![];
     while let Some(b) = bytes.next()
         && b != 32
@@ -178,15 +180,10 @@ fn parse_req_line(
     {
         val.push(b);
     }
-    let uri = str::from_utf8(&val)?;
-    let (route, query) = if uri.contains('?') {
-        let mut s = uri.splitn(2, '?');
-        (s.next().unwrap().into(), s.next().map(|q| parse_query(q)))
-    } else {
-        let route = uri.into();
-
-        (route, None)
+    let Ok(resource) = serde_json::from_slice::<Resource>(&val) else {
+        return Err(PheasantError::ClientError(ClientError::BadRequest));
     };
+
     val.clear();
 
     let proto = bytes
@@ -198,7 +195,7 @@ fn parse_req_line(
     println!("p -> {:?}", proto);
     let proto = Protocol::try_from(proto.as_slice())?;
 
-    Ok((method, route, query, proto))
+    Ok((method, resource, proto))
 }
 
 fn read_parse_headers(
