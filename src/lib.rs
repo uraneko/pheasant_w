@@ -12,7 +12,10 @@ mod callback;
 mod resource;
 
 use callback::generate_service;
-use resource::{Resource, mime, re};
+use resource::{Resource, CorsAttr, mime, re, cors};
+
+// TODO add a new attribute; CORS, e.g.,
+// #[CORS(methods = [get, post, options], origin = "*", credentials = false, headers = ["X-PingOther", "Content-Type"])]
 
 #[proc_macro_attribute]
 pub fn get(attr: TokenStream, fun: TokenStream) -> TokenStream {
@@ -23,8 +26,10 @@ pub fn get(attr: TokenStream, fun: TokenStream) -> TokenStream {
     let mut fun = parse_macro_input!(fun as ItemFn);
     let mime = mime(&mut fun);
     let re = re(&mut fun);
+    let cors = cors(&mut fun);
+    panic!("{:#?}", cors);
 
-    let funs = generate_service(resou.route(), re, mime, fun);
+    let funs = generate_service(resou.route(), mime, re, cors, fun);
 
     quote! {
         #funs

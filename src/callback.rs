@@ -1,6 +1,8 @@
 use proc_macro2::{Span, TokenStream as TS2};
 use quote::quote;
 use syn::{FnArg, Ident, ItemFn, PatType, ReturnType, Type};
+use crate::CorsAttr;
+
 
 // suffixes an ident with the passed &str value
 fn suffix_fn_ident(fun: &mut ItemFn, suffix: &str) {
@@ -56,8 +58,9 @@ fn match_ret_ty(fun: &ItemFn) -> bool {
 
 pub fn generate_service(
     route: String,
-    re: Option<Vec<String>>,
     mime: Option<String>,
+    re: Option<Vec<String>>,
+    cors: Option<CorsAttr>,
     fun: ItemFn,
 ) -> TS2 {
     // let vis = &fun.vis;
@@ -66,9 +69,9 @@ pub fn generate_service(
     let is_responder = match_ret_ty(&fun);
 
     if is_responder {
-        generate_service_from_responder(route, re, fun)
+        generate_service_from_responder(route, re, cors, fun)
     } else {
-        generate_service_from_data_func(route, mime, re, fun)
+        generate_service_from_data_func(route, mime, re, cors, fun)
     }
 }
 
@@ -76,6 +79,7 @@ fn generate_service_from_data_func(
     route: String,
     mime: Option<String>,
     re: Option<Vec<String>>,
+    cors: Option<CorsAttr>,
     mut fun: ItemFn,
 ) -> TS2 {
     // the func that returns Service
@@ -119,7 +123,12 @@ fn generate_service_from_data_func(
     }
 }
 
-fn generate_service_from_responder(route: String, re: Option<Vec<String>>, mut fun: ItemFn) -> TS2 {
+fn generate_service_from_responder(
+    route: String,
+    re: Option<Vec<String>>,
+    cors: Option<CorsAttr>,
+    mut fun: ItemFn,
+) -> TS2 {
     // the func that returns Service
     let service_fun = clone_ident(&fun);
     // the func that wraps the user defined service fn (-> Vec<u8>) into a fn (-> Response)
