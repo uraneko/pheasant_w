@@ -78,6 +78,16 @@ impl Url {
     }
 }
 
+impl Url {
+    pub fn matches_any_origin(&self) -> bool {
+        let Some(ref domain) = self.domain else {
+            return false;
+        };
+
+        domain.len() == 1 && domain[0] == "*"
+    }
+}
+
 fn parse_init<I>(mut toks: I, mut url: Url) -> ParseResult<Url>
 where
     I: Iterator<Item = Token>,
@@ -406,7 +416,7 @@ impl Url {
         let scheme = self
             .scheme
             .map(|s| format!("{}://", s.as_str()))
-            .unwrap_or("".to_owned());
+            .unwrap_or_default();
 
         let mut domain = if let Some(ref domain) = self.domain {
             let mut domain = domain.into_iter().fold(scheme, |acc, d| acc + d + ".");

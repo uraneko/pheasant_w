@@ -1,11 +1,13 @@
 mod errors;
 mod interpreter;
 mod lexer;
+mod origin_set;
 mod parser;
 mod query;
 
 pub use errors::{ParseError, ParseResult};
 pub use interpreter::{TransmuteError, origin::Origin, resource::Resource, route::Route};
+pub use origin_set::OriginSet;
 // Token needs to be public for the tests in `tests/lex.rs`
 pub use lexer::{Token, lex};
 pub use parser::{Scheme, Url};

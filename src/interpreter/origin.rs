@@ -73,6 +73,10 @@ impl Origin {
 
         format!("{}://{}:{}", self.scheme.as_str(), self.domain, port)
     }
+
+    pub fn is_any_origin(&self) -> bool {
+        self.domain == "*"
+    }
 }
 
 // serde traits

@@ -5,37 +5,45 @@ use std::collections::{HashMap, HashSet};
 use super::TransmuteError;
 use crate::{Query, Scheme, Url};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Route {
-    path: String,
+/// uri route type,
+/// e.g., "/index.html"
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+pub struct Route(String);
+
+impl std::ops::Deref for Route {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for Route {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
 }
 
 impl Route {
     pub fn new(segments: Vec<String>) -> Self {
-        Self {
-            path: {
-                let mut p = segments.join("/");
-                p.insert(0, '/');
+        Self({
+            let mut p = segments.join("/");
+            p.insert(0, '/');
 
-                p
-            },
-        }
+            p
+        })
     }
 
     pub fn segments(&self) -> std::str::Split<'_, char> {
-        self.path.split('/')
+        (*self).split('/')
     }
 
     pub fn is_root(&self) -> bool {
-        self.as_str() == "/"
-    }
-
-    pub fn is_glob(&self) -> bool {
-        self.as_str() == "*"
+        (*self).as_str() == "/"
     }
 
     pub fn as_str(&self) -> &str {
-        &self.path
+        self.0.as_str()
     }
 
     pub fn points_to(&self, route: &str) -> bool {

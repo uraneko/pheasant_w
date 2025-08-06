@@ -13,12 +13,12 @@ pub struct Resource {
 }
 
 impl Resource {
-    pub fn query(&self) -> Option<(&HashMap<String, String>, &HashSet<String>)> {
+    pub fn query(&self) -> Option<&Query> {
         let Some(ref query) = self.query else {
             return None;
         };
 
-        Some((query.params(), query.attrs()))
+        Some(query)
     }
 
     pub fn contains_query(&self) -> bool {
@@ -55,6 +55,16 @@ impl Resource {
         };
 
         attrs.contains(k)
+    }
+
+    /// takes route from self
+    pub fn take_route(&mut self) -> Route {
+        std::mem::take(&mut self.route)
+    }
+
+    /// takes query from self
+    pub fn take_query(&mut self) -> Option<Query> {
+        std::mem::take(&mut self.query)
     }
 
     pub fn sequence(&self) -> String {

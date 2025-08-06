@@ -26,6 +26,24 @@ impl Query {
     pub fn attrs(&self) -> &HashSet<String> {
         &self.attrs
     }
+
+    // borrows a param from self.params
+    pub fn param(&self, key: &str) -> Option<&str> {
+        self.params.get(key).map(|val| val.as_str())
+    }
+
+    /// removes a param from self.params
+    pub fn take_param(&mut self, key: &str) -> Option<String> {
+        self.params.remove(key)
+    }
+
+    pub fn contains_param(&self, key: &str) -> bool {
+        self.params.contains_key(key)
+    }
+
+    pub fn contains_attr(&self, attr: &str) -> bool {
+        self.attrs.contains(attr)
+    }
 }
 
 impl Query {
