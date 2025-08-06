@@ -145,12 +145,8 @@ impl Request {
 }
 
 impl HeaderMap for Request {
-    fn header<H: Header>(&self, key: &str) -> Option<H>
-    where
-        <H as std::str::FromStr>::Err: std::fmt::Debug,
-    {
-        // TODO handle the error
-        self.headers.get(key).map(|s| s.parse::<H>().unwrap())
+    fn header<H: Header>(&self, key: &str) -> Option<H> {
+        self.headers.header(key)
     }
 
     fn set_header<H: Header>(&mut self, key: &str, h: H) -> &mut Self {
@@ -272,3 +268,5 @@ fn parse_param(p: &str) -> [&str; 2] {
         [p, "true"]
     }
 }
+
+impl Header for usize {}

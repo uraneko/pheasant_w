@@ -20,8 +20,6 @@ pub struct Server {
     errors: Vec<Fail>,
 }
 
-// TODO Cookies ops
-// TODO CORS ops
 // WARN when responding to a credentialed request, the CORS glob/* header value is not allowed for the following headers
 // Access-Control-Allow-Origin, Access-Control-Allow-Headers, Access-Control-Allow-Methods and Access-Control-Expose-Headers
 // TODO Server.origins { whitelist, blacklist }
@@ -103,7 +101,7 @@ impl Server {
             Some(s) if s.redirects_to(&route) => {
                 Ok((Status::Redirection(Redirection::SeeOther), s))
             }
-            Some(s) if s.route() == "*" && s.method() == Method::Options => {
+            Some(s) if s.method() == Method::Options => {
                 Ok((Status::Successful(Successful::NoContent), s))
             }
             None => Err(PheasantError::ClientError(ClientError::NotFound)),

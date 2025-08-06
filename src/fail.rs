@@ -1,8 +1,6 @@
 use std::pin::Pin;
 
-use mime::Mime;
-
-use crate::{ErrorStatus, Response, ResponseStatus};
+use crate::{ErrorStatus, Mime, Response, ResponseStatus};
 
 pub struct Fail {
     mime: Option<Mime>,

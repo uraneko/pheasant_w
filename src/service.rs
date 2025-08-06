@@ -1,8 +1,6 @@
 use std::pin::Pin;
 
-use super::{IntoRoutes, Method, Protocol, Request, Response, Route};
-
-use mime::Mime;
+use crate::{Cors, IntoRoutes, Method, Mime, Protocol, Request, Response, Route};
 
 /// a http server service type
 /// contains the logic that gets executed when a request is made
@@ -12,6 +10,7 @@ pub struct Service {
     redirects: Vec<Route>,
     mime: Option<Mime>,
     service: BoxFun,
+    cors: Option<Cors>,
 }
 
 unsafe impl Send for Service {}
@@ -49,7 +48,14 @@ impl Service {
     /// }
     /// ```
     ///
-    pub fn new<F, I, O, R>(method: Method, route: &str, redirects: I, mime: &str, call: F) -> Self
+    pub fn new<F, I, O, R>(
+        method: Method,
+        route: &str,
+        redirects: I,
+        mime: &str,
+        cors: Option<Cors>,
+        call: F,
+    ) -> Self
     where
         F: Fn(R, Protocol) -> O + Send + Sync + 'static,
         O: Future<Output = Response> + Send + 'static,
@@ -61,6 +67,7 @@ impl Service {
             route: route.into(),
             redirects: redirects.into_routes(),
             mime: mime.parse().ok(),
+            cors,
             service: Box::new(move |req: Request| {
                 let proto = req.proto();
 
@@ -89,8 +96,8 @@ impl Service {
     // returns a ref to the Mime type if it was provided
     //
     // otherwise returns None
-    pub(crate) fn mime(&self) -> Option<&Mime> {
-        self.mime.as_ref()
+    pub(crate) fn clone_mime(&self) -> Option<Mime> {
+        self.mime.clone()
     }
 
     // checks if the passed route &str value redirects to this service

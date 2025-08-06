@@ -1,12 +1,11 @@
 use std::collections::{HashMap, HashSet};
 
-use chrono::offset::Utc;
-use mime::Mime;
-use serde::ser::{Serialize, SerializeStruct, Serializer};
+use chrono::{DateTime, offset::Utc};
+// use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::{
-    ClientError, Cookie, Cors, Fail, Header, HeaderMap, PheasantError, PheasantResult, Protocol,
-    Redirection, Request, ResponseStatus, Server, ServerError, Service, Status, Successful,
+    ClientError, Cookie, Cors, Fail, Header, HeaderMap, Mime, PheasantError, PheasantResult,
+    Protocol, Redirection, Request, ResponseStatus, ServerError, Service, Status, Successful,
 };
 
 const SERVER: &str = "Pheasant (dev/0.1.0)";
@@ -44,7 +43,6 @@ pub struct Response {
     headers: HashMap<String, String>,
     status: StatusState,
     cookies: HashSet<Cookie>,
-    cors: Option<Cors>,
 }
 
 // impl Serialize for Response {
@@ -72,6 +70,12 @@ impl Response {
             ..Default::default()
         }
     }
+
+    // TONOTDO just like redirects/not implemented
+    // make options requests builtin
+    // RE actually, that would be undesirable
+    // different resources could have different access levels/components
+    // there is a reason an options request is only cached for 5 seconds by default
 
     /// returns a filled response ready for consumption
     ///
@@ -128,6 +132,23 @@ impl Response {
         }
     }
 
+    // pub async fn preflight() -> Self {
+    //     Self {
+    //         status: StatusState::Status(Status::Successful(Successful::NoContent)),
+    //         body: None,
+    //         cors: {
+    //             let mut cors = Cors::new();
+    //             cors.methods()
+    //                 .extend(&[Method::Get, Method::Options, Method::Head, Method::Post]);
+    //             cors.headers().insert("*".into());
+    //             cors.origin("*");
+    //
+    //             Some(cors)
+    //         },
+    //         ..Default::default()
+    //     }
+    // }
+
     /// format the response into bytes to be sent to the client
     pub fn respond(self) -> Vec<u8> {
         println!("{:#?}", self);
@@ -163,10 +184,6 @@ impl Response {
             payload.push_str("Set-Cookie: ");
             payload.push_str(&cookie.to_string());
             payload.push('\n');
-        }
-
-        if let Some(cors) = self.cors {
-            payload.push_str(&cors.format());
         }
 
         payload.push('\n');
@@ -230,8 +247,16 @@ impl Response {
         self
     }
 
-    pub fn set_cors(&mut self, cors: Cors) -> &mut Self {
-        self.cors = Some(cors);
+    // works only if origin is amongst the cors.origins field values
+    // origin comes from the request headers
+    // cors comes from the corresponding service
+    pub fn set_cors(&mut self, cors: &Cors, origin: &str) -> &mut Self {
+        if !cors.allows_origin(origin) {
+            return self;
+        }
+
+        self.set_header("Access-Control-Allow-Origin", origin.to_owned());
+        cors.set_headers(self);
 
         self
     }
@@ -258,17 +283,14 @@ impl Response {
     // there is no system IO going on here
     fn redirection(&mut self, route: &str) {
         self.set_header::<String>("Location".into(), route.into())
-            .set_header("Content-Length".into(), 0);
+            .set_header("Content-Length".into(), 0usize);
     }
 }
 
 // TODO handle OPTIONS request
 
 impl HeaderMap for Response {
-    fn header<H: Header>(&self, key: &str) -> Option<H>
-    where
-        <H as std::str::FromStr>::Err: std::fmt::Debug,
-    {
+    fn header<H: Header>(&self, key: &str) -> Option<H> {
         self.headers.header(key)
     }
 
@@ -283,10 +305,8 @@ impl HeaderMap for Response {
 // if none is found then falls back to text html
 // TODO also consider the `Accept` header
 fn mime(req: &Request, service: &Service) -> Mime {
-    let fallback = service.mime().unwrap_or(&mime::TEXT_HTML);
-
     req.header::<Mime>("Content-Type")
-        .unwrap_or(fallback.clone())
+        .unwrap_or_else(|| service.clone_mime().unwrap_or_default())
 }
 
 // check if data is already compressed
@@ -338,7 +358,7 @@ async fn not_found() -> (HashMap<String, String>, Vec<u8>) {
             ("Content-Type".into(), "text/html".into()),
             ("Content-Length".into(), format!("{}", len)),
             ("Server".into(), SERVER.into()),
-            ("Date".into(), Utc::now().to_string()),
+            ("Date".into(), Header::to_string(&Utc::now())),
         ]),
         body,
     )
@@ -371,5 +391,4 @@ async fn http_version_not_supported() -> (HashMap<String, String>, Vec<u8>) {
     )
 }
 
-impl Header for chrono::DateTime<Utc> {}
-impl Header for String {}
+impl Header for DateTime<Utc> {}

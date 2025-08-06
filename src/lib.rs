@@ -1,15 +1,17 @@
 // #![allow(unused_imports)]
 // #![allow(dead_code)]
 // #![allow(unused_variables)]
-use std::collections::HashMap;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 
-use mime::Mime;
+// NOTE indefinitely experimental
+mod monopoly;
 
 pub mod cookies;
 pub mod cors;
 pub mod fail;
+pub mod headers;
+pub mod mime;
 pub mod requests;
 pub mod response;
 pub mod server;
@@ -19,6 +21,8 @@ pub mod status;
 pub use cookies::Cookie;
 pub use cors::Cors;
 pub use fail::Fail;
+pub use headers::{Header, HeaderMap};
+pub use mime::Mime;
 pub use requests::Request;
 pub use response::Response;
 pub use server::Server;
@@ -27,9 +31,6 @@ pub use status::{
     ClientError, ErrorStatus, Informational, Redirection, ResponseStatus, ServerError, Status,
     Successful,
 };
-
-pub use pheasant_macro_error_code::error_code;
-pub use pheasant_macro_get::get;
 
 pub type PheasantResult<T> = Result<T, PheasantError>;
 
@@ -176,7 +177,9 @@ impl From<&str> for Route {
 
 /// HTTP Method enum
 /// only Get method is somewhat supported at the moment
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum Method {
     Head,
     #[default]
@@ -188,6 +191,22 @@ pub enum Method {
     Connect,
     Options,
     Trace,
+}
+
+impl Method {
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Head => "HEAD",
+            Self::Get => "GET",
+            Self::Post => "POST",
+            Self::Put => "PUT",
+            Self::Patch => "PATCH",
+            Self::Delete => "DELETE",
+            Self::Connect => "CONNECT",
+            Self::Options => "OPTIONS",
+            Self::Trace => "TRACE",
+        }
+    }
 }
 
 impl TryFrom<&[u8]> for Method {
@@ -213,7 +232,7 @@ impl TryFrom<&str> for Method {
     type Error = PheasantError;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
-        match s {
+        match s.to_uppercase().as_str() {
             "HEAD" => Ok(Self::Head),
             "GET" => Ok(Self::Get),
             "POST" => Ok(Self::Post),
@@ -225,55 +244,6 @@ impl TryFrom<&str> for Method {
             "TRACE" => Ok(Self::Trace),
             _ => Err(Self::Error::ClientError(ClientError::BadRequest)),
         }
-    }
-}
-
-/// HTTP header conversion from/to String
-pub trait Header: std::fmt::Display + std::str::FromStr {}
-
-/// read and write headers of a request/response
-pub trait HeaderMap {
-    /// get a header value from a request/response
-    ///
-    /// ```
-    /// let mime: Mime = req.header("Content-Type");
-    /// ```
-    fn header<H: Header>(&self, key: &str) -> Option<H>
-    where
-        <H as std::str::FromStr>::Err: std::fmt::Debug;
-
-    /// set a header value for a request/response
-    ///
-    /// ```
-    /// let len = content.len();
-    /// let maybe_old: Option<usize> = response.set_header("Content-Length", len);
-    /// ```
-    fn set_header<H: Header>(&mut self, key: &str, h: H) -> &mut Self;
-
-    fn has_header<H: Header>(&self, key: &str) -> bool
-    where
-        <H as std::str::FromStr>::Err: std::fmt::Debug,
-    {
-        self.header::<H>(key).is_some()
-    }
-}
-
-impl Header for usize {}
-impl Header for Mime {}
-
-impl HeaderMap for HashMap<String, String> {
-    fn header<H: Header>(&self, key: &str) -> Option<H>
-    where
-        <H as std::str::FromStr>::Err: std::fmt::Debug,
-    {
-        // TODO handle the unwrap error case
-        self.get(key).map(|s| s.parse::<H>().unwrap())
-    }
-
-    fn set_header<H: Header>(&mut self, key: &str, h: H) -> &mut Self {
-        self.insert(key.into(), h.to_string());
-
-        self
     }
 }
 
