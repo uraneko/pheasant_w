@@ -1,16 +1,15 @@
+use chrono::TimeDelta;
 use std::collections::HashSet;
 
-use chrono::TimeDelta;
-
 use crate::{Header, HeaderMap, Method, Response};
+use pheasant_uri::{Origin, OriginSet};
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Cors {
     methods: HashSet<Method>,
     headers: HashSet<String>,
     expose: Option<HashSet<String>>,
-    // TODO once Route is fixed/updated, use it instead of String
-    origins: HashSet<String>,
+    origins: OriginSet,
     /// max-age dictates how long the response of an options request can be cached for
     max_age: Option<TimeDelta>,
 }
@@ -20,45 +19,35 @@ impl Cors {
         Self::default()
     }
 
-    pub fn allows_origin(&self, origin: &str) -> bool {
+    pub fn allows_origin(&self, origin: &Origin) -> bool {
         self.origins.contains(origin)
     }
 
-    pub fn method<T>(&mut self, m: T) -> &mut Self
-    where
-        T: TryInto<Method>,
-        <T as TryInto<Method>>::Error: std::fmt::Debug,
-    {
-        self.methods.insert(m.try_into().unwrap());
-
-        self
+    pub fn methods(&mut self) -> &mut HashSet<Method> {
+        &mut self.methods
     }
 
-    pub fn methods(&mut self, m: &[Method]) -> &mut Self {
-        self.methods.extend(m);
-
-        self
+    pub fn headers(&mut self) -> &mut HashSet<String> {
+        &mut self.headers
     }
 
-    pub fn headers<H: Iterator<Item = String>>(&mut self, h: H) -> &mut Self {
-        self.headers.extend(h.into_iter());
-
-        self
+    pub fn alloc_expose(&mut self) {
+        self.expose = Some(HashSet::new());
     }
 
-    pub fn expose<E: Iterator<Item = String>>(&mut self, e: E) -> &mut Self {
-        self.expose.as_mut().map(|ex| ex.extend(e.into_iter()));
-
-        self
+    pub fn expose(&mut self) -> Option<&mut HashSet<String>> {
+        self.expose.as_mut()
     }
 
-    pub fn origin(&mut self, o: &str) -> &mut Self {
-        self.origins.insert(o.into());
-
-        self
+    pub fn origins(&mut self) -> Option<&mut HashSet<Origin>> {
+        self.origins.origins()
     }
 
-    pub fn max_age(&mut self, duration: TimeDelta) -> &mut Self {
+    pub fn overwrite_origins(&mut self, origins: OriginSet) {
+        self.origins = origins;
+    }
+
+    pub fn update_max_age(&mut self, duration: TimeDelta) -> &mut Self {
         self.max_age = Some(duration);
 
         self
