@@ -474,6 +474,20 @@ version = "0.1.1"
 dependencies = [
  "chrono",
  "pheasant_core",
+ "pheasant_macro_utils",
+ "pheasant_uri",
+ "proc-macro2",
+ "quote",
+ "serde_json",
+ "syn",
+]
+
+[[package]]
+name = "pheasant_macro_utils"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "pheasant_core",
  "pheasant_uri",
  "proc-macro2",
  "quote",

@@ -8,11 +8,8 @@ use syn::{Attribute, Expr, Ident, ItemFn, Lit, LitStr, Token};
 
 use quote::quote;
 
-mod callback;
-mod resource;
-
-use callback::generate_service;
-use resource::{Resource, CorsAttr, mime, re, cors};
+use pheasant_macro_utils::generate_service;
+use pheasant_macro_utils::{StrAttr, cors, mime, re};
 
 // TODO add a new attribute; CORS, e.g.,
 // #[CORS(methods = [get, post, options], origin = "*", credentials = false, headers = ["X-PingOther", "Content-Type"])]
@@ -22,14 +19,13 @@ pub fn get(attr: TokenStream, fun: TokenStream) -> TokenStream {
     // let [attr, fun]: [TS2; 2] = [attr.into(), fun.into()];
     // println!("{}\n{}", quote! {#attr}, quote! { #fun  });
 
-    let resou = parse_macro_input!(attr as Resource);
+    let resou = parse_macro_input!(attr as StrAttr);
     let mut fun = parse_macro_input!(fun as ItemFn);
     let mime = mime(&mut fun);
     let re = re(&mut fun);
     let cors = cors(&mut fun);
-    panic!("{:#?}", cors);
 
-    let funs = generate_service(resou.route(), mime, re, cors, fun);
+    let funs = generate_service(resou.into_string(), mime, re, cors, fun);
 
     quote! {
         #funs
