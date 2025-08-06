@@ -64,50 +64,31 @@ impl Cors {
         self
     }
 
-    pub fn cors_methods(&self, resp: &mut Response) {
-        if self.methods.is_empty() {
-            return;
-        }
-
-        // these hashset types cant be passed directly because set_header takes an owned value of H
-        resp.set_header("Access-Control-Allow-Methods", self.methods.to_string());
+    pub fn cors_methods(&self) -> &HashSet<Method> {
+        &self.methods
     }
 
-    pub fn cors_headers(&self, resp: &mut Response) {
-        if self.headers.is_empty() {
-            return;
-        }
-
-        resp.set_header("Access-Control-Allow-Headers", self.headers.to_string());
+    pub fn cors_headers(&self) -> &HashSet<String> {
+        &self.headers
     }
 
-    pub fn cors_expose(&self, resp: &mut Response) {
-        let Some(ref expose) = self.expose else {
-            return;
-        };
-
-        if expose.is_empty() {
-            return;
-        }
-
-        resp.set_header("Access-Control-Expose-Headers", expose.to_string());
+    // PERF the expose field should be: expose: Vec<&str>
+    // // <- self referencing from the headers field
+    // should use pin
+    pub fn cors_expose(&self) -> Option<&HashSet<String>> {
+        self.expose.as_ref()
     }
 
-    pub fn cors_max_age(&self, resp: &mut Response) {
-        let Some(max_age) = self.max_age else {
-            return;
-        };
-
-        let max_age = max_age.num_seconds();
-        resp.set_header("Access-Control-Max-Age", max_age);
+    pub fn cors_max_age(&self) -> Option<i64> {
+        self.max_age.as_ref().map(|td| td.num_seconds())
     }
 
-    pub fn set_headers(&self, resp: &mut Response) {
-        self.cors_methods(resp);
-        self.cors_headers(resp);
-        self.cors_expose(resp);
-        self.cors_max_age(resp);
-    }
+    // pub fn set_headers(&self, resp: &mut Response) {
+    //     self.cors_methods(resp);
+    //     self.cors_headers(resp);
+    //     self.cors_expose(resp);
+    //     self.cors_max_age(resp);
+    // }
 
     // pub fn format(&self, origin: &str) -> String {
     //     let mut cors = "".to_owned();

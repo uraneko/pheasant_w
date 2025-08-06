@@ -20,7 +20,7 @@ unsafe impl Sync for Service {}
 type BoxFut<'a> = Pin<Box<dyn Future<Output = Response> + Send + 'a>>;
 
 // the wrapper function type
-type BoxFun = Box<dyn Fn(Request) -> BoxFut<'static> + Send + Sync>;
+type BoxFun = Box<dyn Fn(&Request) -> BoxFut<'static> + Send + Sync>;
 
 impl Service {
     /// creates a new Service instance
@@ -59,7 +59,7 @@ impl Service {
     where
         F: Fn(R, Protocol) -> O + Send + Sync + 'static,
         O: Future<Output = Response> + Send + 'static,
-        R: From<Request>,
+        R: for<'a> From<&'a Request>,
         I: IntoRoutes,
     {
         Self {
@@ -68,7 +68,7 @@ impl Service {
             redirects: redirects.into_routes(),
             mime: mime.parse().ok(),
             cors,
-            service: Box::new(move |req: Request| {
+            service: Box::new(move |req: &Request| {
                 let proto = req.proto();
 
                 let input: R = req.into();
@@ -106,5 +106,9 @@ impl Service {
             .iter()
             .find(|r| r.as_str() == route)
             .is_some()
+    }
+
+    pub(crate) fn cors(&self) -> Option<&Cors> {
+        self.cors.as_ref()
     }
 }

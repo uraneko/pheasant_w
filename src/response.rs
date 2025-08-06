@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, offset::Utc};
-// use serde::ser::{Serialize, SerializeStruct, Serializer};
+use pheasant_uri::Origin;
 
 use crate::{
     ClientError, Cookie, Cors, Fail, Header, HeaderMap, Mime, PheasantError, PheasantResult,
@@ -45,23 +45,6 @@ pub struct Response {
     cookies: HashSet<Cookie>,
 }
 
-// impl Serialize for Response {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: Serializer,
-//     {
-//         let mut s = serializer.serialize_struct("Response", 3)?;
-//         s.serialize_field("body", &self.body)?;
-//         s.serialize_field("status", &self.status)?;
-//         s.end()
-//     }
-// }
-
-// struct Template;
-// struct Payload;
-// Response<Template>;
-// Response<Payload>;
-
 impl Response {
     /// generates a new Response template from a protocol value
     pub fn template(proto: Protocol) -> Self {
@@ -84,7 +67,8 @@ impl Response {
     pub async fn payload(req: Request, status: Status, service: &Service) -> Self {
         let mime = mime(&req, service);
 
-        let mut resp = (service.service())(req).await;
+        let mut resp = (service.service())(&req).await;
+        resp.set_cors(&req, service);
         let mime = if resp.has_header::<Mime>("Content-Type") {
             None
         } else {
@@ -238,25 +222,55 @@ impl Response {
         self
     }
 
-    pub fn set_cookies<CI>(&mut self, cookies: CI) -> &mut Self
+    pub fn extend_cookies<CI>(&mut self, cookies: CI) -> &mut Self
     where
-        CI: Iterator<Item = Cookie>,
+        CI: IntoIterator<Item = Cookie>,
     {
-        self.cookies.extend(cookies);
+        self.cookies.extend(cookies.into_iter());
 
         self
     }
 
-    // works only if origin is amongst the cors.origins field values
+    // runs only if origin is amongst the cors.origins field values
     // origin comes from the request headers
     // cors comes from the corresponding service
-    pub fn set_cors(&mut self, cors: &Cors, origin: &str) -> &mut Self {
-        if !cors.allows_origin(origin) {
-            return self;
-        }
+    pub fn set_cors(&mut self, req: &Request, service: &Service) -> &mut Self {
+        if let Some(cors) = service.cors()
+            && let Some(origin) = req.header::<Origin>("Origin")
+            && cors.allows_origin(origin.as_str())
+        {
+            // allow requesting origin
+            self.set_header("Access-Control-Allow-Origin", origin.to_owned());
 
-        self.set_header("Access-Control-Allow-Origin", origin.to_owned());
-        cors.set_headers(self);
+            // NOTE these hashset types cant be passed directly
+            // because set_header takes an owned value of H
+
+            // set allowed methods
+            let methods = cors.cors_methods();
+            if !methods.is_empty() {
+                self.set_header("Access-Control-Allow-Methods", methods.to_string());
+            }
+
+            // set allowed headers
+            let headers = cors.cors_headers();
+            if !headers.is_empty() {
+                self.set_header("Access-Control-Allow-Headers", headers.to_string());
+            }
+
+            // set allowed to expose headers
+            let expose = cors.cors_expose();
+            if let Some(expose) = expose
+                && !expose.is_empty()
+            {
+                self.set_header("Access-Control-Expose-Headers", expose.to_string());
+            }
+
+            // set allowed max options headers cache keeping duration
+            let max_age = cors.cors_max_age();
+            if let Some(max_age) = max_age {
+                self.set_header("Access-Control-Max-Age", max_age);
+            }
+        }
 
         self
     }
@@ -392,3 +406,4 @@ async fn http_version_not_supported() -> (HashMap<String, String>, Vec<u8>) {
 }
 
 impl Header for DateTime<Utc> {}
+impl Header for Origin {}
