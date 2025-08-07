@@ -481,7 +481,11 @@ impl Url {
         }
 
         let mut path = if let Some(ref path) = self.path {
-            path.into_iter().fold(domain, |acc, s| acc + "/" + s)
+            if path.is_empty() {
+                "/".to_owned()
+            } else {
+                path.into_iter().fold(domain, |acc, s| acc + "/" + s)
+            }
         } else {
             domain
         };
