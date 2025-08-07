@@ -1,6 +1,7 @@
 // #![allow(unused_imports)]
 // #![allow(dead_code)]
 // #![allow(unused_variables)]
+use std::fmt;
 use std::str::FromStr;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
@@ -8,7 +9,7 @@ use std::string::FromUtf8Error;
 use pheasant_uri::Route;
 
 // NOTE indefinitely experimental
-mod monopoly;
+// mod monopoly;
 
 pub mod cookies;
 pub mod cors;
@@ -163,6 +164,47 @@ pub enum Method {
     Connect,
     Options,
     Trace,
+}
+
+use proc_macro2::{Delimiter, Group, Punct, Spacing, Span, TokenStream as TS2, TokenTree};
+use quote::{ToTokens, TokenStreamExt};
+use syn::{Ident, Token};
+
+impl ToTokens for Method {
+    fn to_tokens(&self, tokens: &mut TS2) {
+        tokens.append(<Method as Into<TokenTree>>::into(*self))
+    }
+}
+
+impl From<Method> for TokenTree {
+    fn from(m: Method) -> Self {
+        let [ty, var] = {
+            let s = m.to_string();
+            let mut iter = s.split("::").map(|s| Ident::new(s, Span::call_site()));
+
+            [iter.next().unwrap(), iter.next().unwrap()]
+        };
+
+        let mut group = TS2::new();
+        group.append(ty);
+        group.append(Punct::new(':', Spacing::Joint));
+        group.append(Punct::new(':', Spacing::Alone));
+        group.append(var);
+        let group = Group::new(Delimiter::None, group);
+
+        TokenTree::from(group)
+    }
+}
+
+impl fmt::Display for Method {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Method::{}{}",
+            self.as_str().chars().next().unwrap(),
+            &self.as_str()[1..].to_lowercase(),
+        )
+    }
 }
 
 impl Method {
