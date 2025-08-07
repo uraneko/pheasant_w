@@ -12,6 +12,14 @@ pub struct Resource {
     query: Option<Query>,
 }
 
+impl std::str::FromStr for Resource {
+    type Err = TransmuteError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse::<Url>().unwrap().downcast::<Self>()
+    }
+}
+
 impl Resource {
     pub fn query(&self) -> Option<&Query> {
         let Some(ref query) = self.query else {

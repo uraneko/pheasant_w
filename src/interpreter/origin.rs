@@ -1,5 +1,6 @@
 use serde::de::{Deserialize, Deserializer, Error, Visitor};
 use serde::ser::{Serialize, SerializeTupleStruct, Serializer};
+use std::str::FromStr;
 
 use super::TransmuteError;
 use crate::{Scheme, Url};
@@ -28,6 +29,14 @@ impl TryFrom<Url> for Origin {
             domain: domain.join("."),
             port: url.port(),
         })
+    }
+}
+
+impl FromStr for Origin {
+    type Err = TransmuteError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse::<Url>().unwrap().downcast::<Self>()
     }
 }
 

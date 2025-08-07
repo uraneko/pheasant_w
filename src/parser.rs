@@ -2,7 +2,7 @@ use serde::de::{Deserialize, Deserializer, Error, Visitor};
 use serde::ser::{Serialize, SerializeTupleStruct, Serializer};
 use std::collections::{HashMap, HashSet};
 
-use crate::{ParseError, ParseResult, Query, lex, lexer::Token};
+use crate::{ParseError, ParseResult, Query, TransmuteError, lex, lexer::Token};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Scheme {
@@ -253,6 +253,8 @@ where
     Ok(url)
 }
 
+// this fn repeats for almost no reason
+// should merge parse_path and parse_path_absolute
 fn parse_path<I>(mut toks: I, mut url: Url) -> ParseResult<Url>
 where
     I: Iterator<Item = Token>,
@@ -491,6 +493,14 @@ impl Url {
         }
 
         path
+    }
+
+    /// downcasts the Url instance to sub url type
+    pub fn downcast<T>(self) -> Result<T, TransmuteError>
+    where
+        T: TryFrom<Self, Error = TransmuteError>,
+    {
+        self.try_into()
     }
 }
 

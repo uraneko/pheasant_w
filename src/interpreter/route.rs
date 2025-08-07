@@ -1,6 +1,7 @@
 use serde::de::{Deserialize, Deserializer, Error, Visitor};
 use serde::ser::{Serialize, SerializeTupleStruct, Serializer};
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 
 use super::TransmuteError;
 use crate::{Query, Scheme, Url};
@@ -9,6 +10,22 @@ use crate::{Query, Scheme, Url};
 /// e.g., "/index.html"
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct Route(String);
+
+impl std::str::FromStr for Route {
+    type Err = TransmuteError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse::<Url>().unwrap().downcast::<Self>()
+    }
+}
+
+impl Route {
+    // safe unwrap as long as this function is used as intended,
+    // which is from the http methods macros
+    pub fn macro_checked(s: &str) -> Self {
+        s.parse::<Route>().unwrap()
+    }
+}
 
 impl std::ops::Deref for Route {
     type Target = String;
@@ -69,7 +86,6 @@ impl serde::Serialize for Route {
     where
         S: Serializer,
     {
-        // TODO
         serializer.serialize_str(self.as_str())
     }
 }
@@ -79,8 +95,8 @@ struct RouteVisitor;
 impl<'de> Visitor<'de> for RouteVisitor {
     type Value = Route;
 
-    fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("expected str value of a url route")
+    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("str value of a url route")
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -200,6 +216,34 @@ impl<'de> serde::Deserialize<'de> for Route {
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_struct("Route", &["path"], RouteVisitor)
+        deserializer.deserialize_tuple_struct("Route", 1, RouteVisitor)
+    }
+}
+
+// ToTokens
+use proc_macro2::{Delimiter, Group, Literal, Punct, Spacing, Span, TokenStream as TS2, TokenTree};
+use quote::{ToTokens, TokenStreamExt};
+use syn::{Ident, Token};
+
+impl ToTokens for Route {
+    fn to_tokens(&self, tokens: &mut TS2) {
+        tokens.append(<&Route as Into<TokenTree>>::into(self))
+    }
+}
+
+impl From<&Route> for TokenTree {
+    fn from(route: &Route) -> Self {
+        let mut ts = TS2::new();
+        let ident = Ident::new("Route", Span::call_site());
+        ts.append(ident);
+
+        let lit = Group::new(
+            Delimiter::Parenthesis,
+            TokenTree::Literal(Literal::string(route.as_str())).into(),
+        );
+        ts.append(lit);
+
+        let group = Group::new(Delimiter::None, ts);
+        TokenTree::from(group)
     }
 }

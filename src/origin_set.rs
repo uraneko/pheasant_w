@@ -32,6 +32,10 @@ impl FromStr for OriginSet {
 }
 
 impl OriginSet {
+    pub fn macro_checked(set: HashSet<Origin>) -> Self {
+        Self::WhiteList(set)
+    }
+
     pub fn is_white_list(&self) -> bool {
         std::mem::discriminant(self) == std::mem::discriminant(&Self::default())
     }
@@ -46,7 +50,15 @@ impl OriginSet {
         }
     }
 
-    pub fn origins(&mut self) -> Option<&mut HashSet<Origin>> {
+    pub fn origins_ref(&self) -> Option<&HashSet<Origin>> {
+        let Self::WhiteList(wl) = self else {
+            return None;
+        };
+
+        Some(wl)
+    }
+
+    pub fn origins_mut(&mut self) -> Option<&mut HashSet<Origin>> {
         let Self::WhiteList(wl) = self else {
             return None;
         };
