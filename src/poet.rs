@@ -25,7 +25,7 @@ pub struct Poet {
 }
 
 impl Poet {
-    fn new(mut plumber: Plumber) -> Self {
+    pub fn new(mut plumber: Plumber) -> Self {
         let method = plumber.method();
         let route = plumber.take_route();
         let mime = plumber.take_mime();
@@ -164,7 +164,7 @@ impl Inscriptions for Poet {
 
     fn cors(&self) -> TS2 {
         if let Some(ref cors) = self.cors {
-            let methods = cors.cors_methods().into_iter().map(|m| m.as_str());
+            let methods = cors.cors_methods().into_iter();
             let headers = cors
                 .cors_headers()
                 .into_iter()

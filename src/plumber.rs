@@ -9,6 +9,7 @@ use crate::{CorsAttr, Mining, StrAttr};
 use pheasant_core::{Cors, Method, Mime};
 use pheasant_uri::Route;
 
+#[derive(Debug)]
 pub struct Plumber {
     fun: ItemFn,
     method: Method,
