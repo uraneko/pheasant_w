@@ -1,11 +1,10 @@
 use chrono::TimeDelta;
 use pheasant_core::{Cors, Method};
-use pheasant_uri::{Origin, OriginSet};
+use pheasant_uri::{Origin, OriginSet, Url};
 use proc_macro2::Span;
 use std::collections::HashSet;
-use syn::parse::{Error as ParseError, Parse, ParseBuffer, ParseStream, Result as PRes};
-use syn::parse_macro_input;
-use syn::{Ident, ItemFn, Lit, Meta, MetaNameValue, Token, bracketed, token::Bracket};
+use syn::parse::{Error as ParseError, Parse, ParseStream, Result as PRes};
+use syn::{Ident, Lit, Token, bracketed, token::Bracket};
 
 #[derive(Debug)]
 pub struct StrAttr(String);
@@ -65,15 +64,14 @@ where
                 .into_iter()
                 .map(|l| str_lit(l))
                 .filter(|res| res.is_ok())
-                .map(|res| serde_json::from_str::<Origin>(&res.unwrap()))
+                .map(|res| res.unwrap().parse::<Url>().unwrap().downcast::<Origin>())
+                // .map(|res| serde_json::from_str::<Origin>(&res.unwrap()))
                 .filter(|ori| ori.is_ok())
                 .map(|ori| ori.unwrap()),
         );
     } else {
         let str_url = str_lit(Lit::parse(s)?)?;
-        println!("origins");
         let origins = str_url.parse::<OriginSet>().unwrap();
-        println!("origins");
         cors.overwrite_origins(origins);
     }
 
@@ -145,6 +143,12 @@ fn parse_duration(s: ParseStream, cors: &mut Cors) -> PRes<()> {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct CorsAttr(Cors);
 
+impl CorsAttr {
+    pub fn cors(self) -> Cors {
+        self.0
+    }
+}
+
 impl Parse for CorsAttr {
     fn parse(s: ParseStream) -> PRes<Self> {
         let mut cors = Cors::default();
@@ -183,8 +187,8 @@ impl Parse for CorsAttr {
 pub struct StrVec(Vec<String>);
 
 impl StrVec {
-    pub fn into_vec(self) -> Vec<String> {
-        self.0
+    pub fn into_iter(self) -> std::vec::IntoIter<std::string::String> {
+        self.0.into_iter()
     }
 }
 
