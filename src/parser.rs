@@ -88,6 +88,7 @@ impl Url {
     }
 }
 
+// TODO WARN file scheme needs special handling which is not implemented yet
 fn parse_init<I>(mut toks: I, mut url: Url) -> ParseResult<Url>
 where
     I: Iterator<Item = Token>,
@@ -196,12 +197,19 @@ where
     let mut last = Last::Item;
     while let Some(t) = toks.next() {
         match t {
-            Token::Word(s) => {
-                if last == Last::Item {
-                    return Err(ParseError::url(0).unwrap());
+            Token::Word(s) | Token::Number(s) => {
+                if last == Last::Sep || path.is_empty() {
+                    path.push(s);
+                } else {
+                    let Some(ref mut segment) = path.last_mut() else {
+                        unreachable!("logic handled one line ago");
+                    };
+
+                    segment.push_str(&s);
                 }
-                path.push(s);
-                last = Last::Item;
+                if last == Last::Sep {
+                    last = Last::Item
+                }
             }
             Token::Slash => {
                 if last == Last::Sep {
@@ -224,7 +232,20 @@ where
                 url.update_path(path);
                 return parse_fragment(toks, url);
             }
-            _ => return Err(ParseError::url(0).unwrap()),
+            token => {
+                if last == Last::Sep || path.is_empty() {
+                    path.push(token.as_str().to_owned());
+                } else {
+                    let Some(ref mut segment) = path.last_mut() else {
+                        unreachable!("logic handled one line ago");
+                    };
+
+                    segment.push_str(token.as_str());
+                }
+                if last == Last::Sep {
+                    last = Last::Item
+                }
+            }
         }
     }
     url.update_path(path);
@@ -240,12 +261,19 @@ where
     let mut last = Last::Sep;
     while let Some(t) = toks.next() {
         match t {
-            Token::Word(s) => {
-                if last == Last::Item {
-                    return Err(ParseError::url(0).unwrap());
+            Token::Word(s) | Token::Number(s) => {
+                if last == Last::Sep || path.is_empty() {
+                    path.push(s);
+                } else {
+                    let Some(ref mut segment) = path.last_mut() else {
+                        unreachable!("logic handled one line ago");
+                    };
+
+                    segment.push_str(&s);
                 }
-                path.push(s);
-                last = Last::Item;
+                if last == Last::Sep {
+                    last = Last::Item
+                }
             }
             Token::Slash => {
                 if last == Last::Sep && !path.is_empty() {
@@ -268,7 +296,20 @@ where
                 url.update_path(path);
                 return parse_fragment(toks, url);
             }
-            _ => return Err(ParseError::url(0).unwrap()),
+            token => {
+                if last == Last::Sep || path.is_empty() {
+                    path.push(token.as_str().to_owned());
+                } else {
+                    let Some(ref mut segment) = path.last_mut() else {
+                        unreachable!("logic handled one line ago");
+                    };
+
+                    segment.push_str(token.as_str());
+                }
+                if last == Last::Sep {
+                    last = Last::Item
+                }
+            }
         }
     }
     url.update_path(path);
@@ -343,6 +384,8 @@ where
     // fragment comes at the end so we're done
     Ok(url)
 }
+
+fn parse_eat() {}
 
 fn parse_url<I>(toks: I) -> ParseResult<Url>
 where
