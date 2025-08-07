@@ -114,7 +114,11 @@ where
         }
         // either //{domain} or /{path}
         Token::Slash => {
-            let next = toks.next().ok_or(ParseError::url(0).unwrap())?;
+            let Some(next) = toks.next() else {
+                url.update_path(vec![]);
+
+                return Ok(url);
+            };
             match next {
                 // //{domain}
                 Token::Slash => {
@@ -127,7 +131,7 @@ where
                 _ => return Err(ParseError::url(0).unwrap()),
             }
         }
-        _ => panic!(),
+        _ => panic!("pnaicc:url/parse"),
     }
 }
 

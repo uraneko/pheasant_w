@@ -1,9 +1,7 @@
 use pheasant_uri::Url;
 
 fn main() {
-    let url = "https://domain.com:1234/path/leading/somewhere?query=needs&params#then fragment"
-        .parse::<Url>()
-        .unwrap();
+    let url = "/".parse::<Url>().unwrap();
 
     println!("{:#?}", url);
 }
