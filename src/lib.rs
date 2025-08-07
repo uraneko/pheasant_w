@@ -1,6 +1,7 @@
 // #![allow(unused_imports)]
 // #![allow(dead_code)]
 // #![allow(unused_variables)]
+use std::collections::HashSet;
 use std::fmt;
 use std::str::FromStr;
 use std::str::Utf8Error;
@@ -13,7 +14,7 @@ use pheasant_uri::Route;
 
 pub mod cookies;
 pub mod cors;
-pub mod fail;
+pub mod failure;
 pub mod headers;
 pub mod mime;
 pub mod requests;
@@ -24,7 +25,7 @@ pub mod status;
 
 pub use cookies::Cookie;
 pub use cors::Cors;
-pub use fail::Fail;
+pub use failure::Failure;
 pub use headers::{Header, HeaderMap};
 pub use mime::Mime;
 pub use requests::Request;
@@ -84,10 +85,11 @@ impl From<url::ParseError> for PheasantError {
     }
 }
 
+// NOTE probably deprecate this
 /// used for service redirections generations
 pub trait IntoRoutes {
     /// consumes self and returns the routes
-    fn into_routes(self) -> Vec<Route>;
+    fn into_routes(self) -> HashSet<Route>;
 }
 
 // impl<T> IntoRoutes for T
@@ -104,7 +106,7 @@ macro_rules! impl_into_routes {
     ($($t: ty),*) => {
         $(
             impl IntoRoutes for $t {
-                fn into_routes(self) -> Vec<Route> {
+                fn into_routes(self) -> HashSet<Route> {
                     self.into_iter().map(|r|
                     serde_json::from_str(r).unwrap()
 
@@ -127,9 +129,9 @@ impl<T> IntoRoutes for Option<T>
 where
     T: IntoRoutes,
 {
-    fn into_routes(self) -> Vec<Route> {
+    fn into_routes(self) -> HashSet<Route> {
         let Some(t) = self else {
-            return vec![];
+            return HashSet::new();
         };
 
         t.into_routes()
@@ -137,14 +139,14 @@ where
 }
 
 impl<'a> IntoRoutes for &'a str {
-    fn into_routes(self: &'a str) -> Vec<Route> {
-        vec![serde_json::from_str(self).unwrap()]
+    fn into_routes(self: &'a str) -> HashSet<Route> {
+        HashSet::from([serde_json::from_str(self).unwrap()])
     }
 }
 
 impl IntoRoutes for String {
-    fn into_routes(self: String) -> Vec<Route> {
-        vec![serde_json::from_str(&self).unwrap()]
+    fn into_routes(self: String) -> HashSet<Route> {
+        HashSet::from([serde_json::from_str(&self).unwrap()])
     }
 }
 
@@ -208,7 +210,7 @@ impl fmt::Display for Method {
 }
 
 impl Method {
-    fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         match self {
             Self::Head => "HEAD",
             Self::Get => "GET",
@@ -341,5 +343,33 @@ impl FromStr for Protocol {
             }
             _ => Err(Self::Err::ClientError(ClientError::BadRequest)),
         }
+    }
+}
+
+pub trait ServiceBundle {
+    fn bundle_iter(self) -> std::vec::IntoIter<Service>;
+}
+
+impl ServiceBundle for Service {
+    fn bundle_iter(self) -> std::vec::IntoIter<Service> {
+        vec![self].into_iter()
+    }
+}
+
+impl ServiceBundle for [Service; 2] {
+    fn bundle_iter(self) -> std::vec::IntoIter<Service> {
+        Vec::from(self).into_iter()
+    }
+}
+
+impl ServiceBundle for [Service; 3] {
+    fn bundle_iter(self) -> std::vec::IntoIter<Service> {
+        Vec::from(self).into_iter()
+    }
+}
+
+impl ServiceBundle for Vec<Service> {
+    fn bundle_iter(self) -> std::vec::IntoIter<Service> {
+        self.into_iter()
     }
 }

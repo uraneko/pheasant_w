@@ -2,14 +2,14 @@ use std::pin::Pin;
 
 use crate::{ErrorStatus, Mime, Response, ResponseStatus};
 
-pub struct Fail {
+pub struct Failure {
     mime: Option<Mime>,
     status: ErrorStatus,
     fail: BoxFun,
 }
 
-unsafe impl Send for Fail {}
-unsafe impl Sync for Fail {}
+unsafe impl Send for Failure {}
+unsafe impl Sync for Failure {}
 
 // the future return type
 type BoxFut<'a> = Pin<Box<dyn Future<Output = Response> + Send + 'a>>;
@@ -17,7 +17,7 @@ type BoxFut<'a> = Pin<Box<dyn Future<Output = Response> + Send + 'a>>;
 // the wrapper function type
 type BoxFun = Box<dyn Fn() -> BoxFut<'static> + Send + Sync>;
 
-impl Fail {
+impl Failure {
     pub fn new<F, O>(status: ErrorStatus, mime: &str, fun: F) -> Self
     where
         F: Fn() -> O + Send + Sync + 'static,

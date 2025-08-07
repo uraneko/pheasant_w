@@ -1,20 +1,49 @@
 use chrono::TimeDelta;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{Header, HeaderMap, Method, Response};
 use pheasant_uri::{Origin, OriginSet};
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Cors {
+    /// allowed cors req methods
     methods: HashSet<Method>,
+    /// allowed cors req headers
     headers: HashSet<String>,
+    /// the server allows these headers to be exposed to the used in the client side
     expose: Option<HashSet<String>>,
+    /// set of whitelisted origins or glob '*' to allow any origin
     origins: OriginSet,
     /// max-age dictates how long the response of an options request can be cached for
     max_age: Option<TimeDelta>,
 }
 
 impl Cors {
+    /// no unwrap in this function is bad or dangerous, when used as/where intended
+    ///
+    /// this function was made to be used inside the http methods macros
+    ///
+    /// the args it takes are stringified from the correct values parsed and error handled in the
+    /// macro
+    pub fn macro_checked(
+        methods: HashSet<&str>,
+        headers: HashSet<String>,
+        expose: Option<HashSet<String>>,
+        origins: OriginSet,
+        max_age: Option<i64>,
+    ) -> Self {
+        Self {
+            methods: methods
+                .into_iter()
+                .map(|m| m.parse::<Method>().unwrap())
+                .collect(),
+            headers,
+            expose,
+            origins,
+            max_age: max_age.map(|ma| TimeDelta::new(ma, 0).unwrap()),
+        }
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -40,7 +69,7 @@ impl Cors {
     }
 
     pub fn origins(&mut self) -> Option<&mut HashSet<Origin>> {
-        self.origins.origins()
+        self.origins.origins_mut()
     }
 
     pub fn overwrite_origins(&mut self, origins: OriginSet) {
@@ -68,8 +97,48 @@ impl Cors {
         self.expose.as_ref()
     }
 
+    pub fn cors_origins(&self) -> &OriginSet {
+        &self.origins
+    }
+
     pub fn cors_max_age(&self) -> Option<i64> {
         self.max_age.as_ref().map(|td| td.num_seconds())
+    }
+
+    pub fn to_headers(&self, origin: Option<&Origin>) -> HashMap<String, String> {
+        [
+            origin.map(|ori| ("Access-Control-Allow-Origin".to_owned(), ori.sequence())),
+            Some(self.cors_methods())
+                .filter(|methods| !methods.is_empty())
+                .map(|methods| {
+                    (
+                        "Access-Control-Allow-Methods".to_owned(),
+                        methods.to_string(),
+                    )
+                }),
+            Some(self.cors_headers())
+                .filter(|headers| !headers.is_empty())
+                .map(|headers| {
+                    (
+                        "Access-Control-Allow-Headers".to_owned(),
+                        headers.to_string(),
+                    )
+                }),
+            self.cors_expose()
+                .filter(|expose| !expose.is_empty())
+                .map(|expose| {
+                    (
+                        "Access-Control-Expose-Headers".to_owned(),
+                        expose.to_string(),
+                    )
+                }),
+            self.cors_max_age()
+                .map(|max_age| ("Access-Control-Max-Age".to_owned(), format!("{}", max_age))),
+        ]
+        .into_iter()
+        .filter(|cors| cors.is_some())
+        .map(|opt| opt.unwrap())
+        .collect::<HashMap<String, String>>()
     }
 
     // pub fn set_headers(&self, resp: &mut Response) {

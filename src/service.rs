@@ -1,14 +1,17 @@
+use std::collections::HashSet;
 use std::pin::Pin;
 
 use crate::{Cors, IntoRoutes, Method, Mime, Protocol, Request, Response};
 use pheasant_uri::Route;
+
+// TODO maybe make new type: ResponseTemplate and make that the Service.service return type
 
 /// a http server service type
 /// contains the logic that gets executed when a request is made
 pub struct Service {
     method: Method,
     route: Route,
-    redirects: Vec<Route>,
+    redirects: Option<HashSet<Route>>,
     mime: Option<Mime>,
     service: BoxFun,
     cors: Option<Cors>,
@@ -52,9 +55,9 @@ impl Service {
     pub fn new<F, I, O, R>(
         method: Method,
         // TODO convert str to route at the macro level before getting here
-        route: &str,
-        redirects: I,
-        mime: &str,
+        route: Route,
+        redirects: Option<HashSet<Route>>,
+        mime: Option<Mime>,
         cors: Option<Cors>,
         call: F,
     ) -> Self
@@ -66,10 +69,10 @@ impl Service {
     {
         Self {
             method,
-            route: serde_json::from_str(&route).unwrap(),
-            redirects: redirects.into_routes(),
-            mime: mime.parse().ok(),
+            route,
+            mime,
             cors,
+            redirects,
             service: Box::new(move |req: &Request| {
                 let proto = req.proto();
 
@@ -104,10 +107,10 @@ impl Service {
 
     // checks if the passed route &str value redirects to this service
     pub(crate) fn redirects_to(&self, route: &str) -> bool {
-        self.redirects
-            .iter()
-            .find(|r| r.as_str() == route)
-            .is_some()
+        let Some(ref re) = self.redirects else {
+            return false;
+        };
+        re.iter().find(|r| r.as_str() == route).is_some()
     }
 
     pub(crate) fn cors(&self) -> Option<&Cors> {

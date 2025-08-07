@@ -4,7 +4,7 @@ use chrono::{DateTime, offset::Utc};
 use pheasant_uri::Origin;
 
 use crate::{
-    ClientError, Cookie, Cors, Fail, Header, HeaderMap, Mime, PheasantError, PheasantResult,
+    ClientError, Cookie, Cors, Failure, Header, HeaderMap, Mime, PheasantError, PheasantResult,
     Protocol, Redirection, Request, ResponseStatus, ServerError, Service, Status, Successful,
 };
 
@@ -92,9 +92,16 @@ impl Response {
         }
     }
 
+    pub fn preflight(cors: &Cors, origin: Option<&Origin>) -> Self {
+        Self {
+            headers: cors.to_headers(origin),
+            ..Default::default()
+        }
+    }
+
     /// generates a response from a client/server error
     pub async fn from_err(
-        fail: Option<&Fail>,
+        fail: Option<&Failure>,
         proto: Option<Protocol>,
     ) -> Result<Self, PheasantError> {
         let Some(fail) = fail else {
@@ -236,16 +243,16 @@ impl Response {
         self
     }
 
-    // runs only if origin is amongst the cors.origins field values
     // origin comes from the request headers
     // cors comes from the corresponding service
     pub fn set_cors(&mut self, req: &Request, service: &Service) -> &mut Self {
         if let Some(cors) = service.cors()
             && let Some(origin) = req.header::<Origin>("Origin")
-            && cors.allows_origin(&origin)
         {
-            // allow requesting origin
-            self.set_header("Access-Control-Allow-Origin", origin.to_owned());
+            if cors.allows_origin(&origin) {
+                // allow requesting origin
+                self.set_header("Access-Control-Allow-Origin", origin.to_owned());
+            }
 
             // NOTE these hashset types cant be passed directly
             // because set_header takes an owned value of H

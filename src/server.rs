@@ -1,13 +1,9 @@
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
 
-use mime::Mime;
-use serde::Serialize;
-use url::Url;
-
 use super::{
-    ClientError, Fail, Method, PheasantError, PheasantResult, Protocol, Redirection, Request,
-    Response, ResponseStatus, Route, ServerError, Service, Status, Successful,
+    ClientError, Failure, Method, PheasantError, PheasantResult, Protocol, Redirection, Request,
+    Response, ResponseStatus, Route, ServerError, Service, ServiceBundle, Status, Successful,
 };
 
 /// the http server type
@@ -17,7 +13,7 @@ pub struct Server {
     /// container for the server services
     services: Vec<Service>,
     // container for the server error responses (client/server errors)
-    errors: Vec<Fail>,
+    errors: Vec<Failure>,
 }
 
 // WARN when responding to a credentialed request, the CORS glob/* header value is not allowed for the following headers
@@ -63,18 +59,19 @@ impl Server {
     }
 
     /// pushes a new service to the server
-    pub fn service<S>(&mut self, s: S) -> &mut Self
+    pub fn service<S, B>(&mut self, s: S) -> &mut Self
     where
-        S: Fn() -> Service,
+        S: Fn() -> B,
+        B: ServiceBundle,
     {
-        self.services.push(s());
+        self.services.extend(s().bundle_iter());
 
         self
     }
 
     pub fn failure<E>(&mut self, e: E) -> &mut Self
     where
-        E: Fn() -> Fail,
+        E: Fn() -> Failure,
     {
         self.errors.push(e());
 
@@ -112,7 +109,7 @@ impl Server {
     /// searches for the speficied `Fail` (error status fallback service)
     /// returns `Some(&Fail)` if found
     /// else returns `None`
-    pub fn fail_status(&self, status_code: u16) -> Option<&Fail> {
+    pub fn fail_status(&self, status_code: u16) -> Option<&Failure> {
         self.errors.iter().find(move |e| e.code() == status_code)
     }
 
