@@ -462,8 +462,11 @@ dependencies = [
  "deflate",
  "mime",
  "pheasant_uri",
+ "proc-macro2",
+ "quote",
  "serde",
  "serde_json",
+ "syn",
  "tokio",
  "url",
 ]
@@ -472,13 +475,8 @@ dependencies = [
 name = "pheasant_macro_get"
 version = "0.1.1"
 dependencies = [
- "chrono",
- "pheasant_core",
  "pheasant_macro_utils",
- "pheasant_uri",
- "proc-macro2",
  "quote",
- "serde_json",
  "syn",
 ]
 
@@ -499,8 +497,11 @@ dependencies = [
 name = "pheasant_uri"
 version = "0.1.0"
 dependencies = [
+ "proc-macro2",
+ "quote",
  "serde",
  "serde_json",
+ "syn",
 ]
 
 [[package]]
