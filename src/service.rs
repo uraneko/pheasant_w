@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::pin::Pin;
 
-use crate::{Cors, IntoRoutes, Method, Mime, Protocol, Request, Response};
+use crate::{Cors, Method, Mime, Protocol, Request, Response};
 use pheasant_uri::Route;
 
 // TODO maybe make new type: ResponseTemplate and make that the Service.service return type
