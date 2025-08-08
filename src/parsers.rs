@@ -65,7 +65,6 @@ where
                 .map(|l| str_lit(l))
                 .filter(|res| res.is_ok())
                 .map(|res| res.unwrap().parse::<Url>().unwrap().downcast::<Origin>())
-                // .map(|res| serde_json::from_str::<Origin>(&res.unwrap()))
                 .filter(|ori| ori.is_ok())
                 .map(|ori| ori.unwrap()),
         );

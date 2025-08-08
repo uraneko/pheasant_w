@@ -179,7 +179,7 @@ impl Inscriptions for Poet {
             let max_age = option_quote(max_age);
 
             quote! {
-                Some(pheasant::Cors::macro_checked( std::collections::HashSet::from([ #(#methods,)* ]),  std::collections::HashSet::from([ #(#headers,)* ]), #expose,  #origins, #max_age))
+                Some(pheasant::Cors::macro_checked( std::collections::HashSet::from([ #(pheasant:: #methods,)* ]),  std::collections::HashSet::from([ #(#headers,)* ]), #expose,  #origins, #max_age))
             }
         } else {
             quote! { None }
@@ -250,8 +250,8 @@ impl ServiceInscriptions for Poet {
             }
         } else {
             quote! {
-                #vis async fn #ident(i: #arg, p: pheasant::Protocol) -> pheasant::Response {
-                    let mut resp = pheasant::Response::with_proto(p);
+                #vis async fn #ident(i: #arg, proto: pheasant::Protocol) -> pheasant::Response {
+                    let mut resp = pheasant::Response::with_proto(proto);
                     let data = #service(i).await;
                     resp.update_body(data);
 
@@ -267,19 +267,16 @@ impl ServiceInscriptions for Poet {
         let vis = fun.vis();
         let preflight = fun.decorate_ident("_preflight");
         let service = fun.decorate_ident("_preflight_service");
-        let route = self.route.as_str();
+        let route = self.route();
         let cors = self.cors();
 
         quote! {
-            #vis async fn #preflight(origin: pheasant::RequestOrigin) -> pheasant::Response {
-                let mut resp = pheasant::Response::preflight(& #cors, origin.origin());
-                res.update_status(pheasant::Status::Successful(pheasant::Successful::NoContent), None, "");
+            #vis async fn #preflight(origin: pheasant::RequestOrigin, proto: pheasant::Protocol) -> pheasant::Response {
+                let mut resp = pheasant::Response::preflight(& #cors .unwrap(), origin.origin());
+                resp.update_status(pheasant::Status::Successful(pheasant::Successful::NoContent), None, "");
+                resp.update_proto(proto);
 
                 resp
-            }
-
-            #vis fn #service() -> pheasant::Service {
-                pheasant::Service::new(#method, #route, None, None, #cors, #preflight)
             }
         }
     }
@@ -309,7 +306,7 @@ impl ServiceInscriptions for Poet {
         let decorated = service(method, &route, &re, &mime, &cors, &decorated);
         let (return_type, service_bundle) = if self.cors.is_some() {
             (
-                Type::Verbatim("[phesant::Service; 2]".parse().unwrap()),
+                Type::Verbatim("[pheasant::Service; 2]".parse().unwrap()),
                 quote! {[
                     #preflight,
                     #decorated
