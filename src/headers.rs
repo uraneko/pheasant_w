@@ -23,6 +23,7 @@ macro_rules! impl_hdfs {
 pub trait Header {
     fn to_string(&self) -> String;
 
+    // TODO handle the unwrap error case
     fn from_str(s: &str) -> Self;
 }
 
@@ -50,7 +51,6 @@ pub trait HeaderMap {
 
 impl HeaderMap for HashMap<String, String> {
     fn header<H: Header>(&self, key: &str) -> Option<H> {
-        // TODO handle the unwrap error case
         self.get(key).map(|s| <H as Header>::from_str(s))
     }
 

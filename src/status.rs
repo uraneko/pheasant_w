@@ -422,6 +422,15 @@ impl ErrorStatus {
     }
 }
 
+impl From<ErrorStatus> for Status {
+    fn from(err: ErrorStatus) -> Self {
+        match err {
+            ErrorStatus::Client(ce) => Self::ClientError(ce),
+            ErrorStatus::Server(se) => Self::ServerError(se),
+        }
+    }
+}
+
 impl ToTokens for ErrorStatus {
     fn to_tokens(&self, tokens: &mut TS2) {
         tokens.append(<ErrorStatus as Into<TokenTree>>::into(*self))

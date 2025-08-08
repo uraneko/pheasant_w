@@ -4,8 +4,6 @@ use std::pin::Pin;
 use crate::{Cors, Method, Mime, Protocol, Request, Response};
 use pheasant_uri::Route;
 
-// TODO maybe make new type: ResponseTemplate and make that the Service.service return type
-
 /// a http server service type
 /// contains the logic that gets executed when a request is made
 pub struct Service {
@@ -54,7 +52,6 @@ impl Service {
     ///
     pub fn new<F, O, R>(
         method: Method,
-        // TODO convert str to route at the macro level before getting here
         route: Route,
         redirects: Option<HashSet<Route>>,
         mime: Option<Mime>,

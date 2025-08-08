@@ -6,6 +6,9 @@ use super::{
     Response, ResponseStatus, Route, ServerError, Service, ServiceBundle, Status, Successful,
 };
 
+// TODO dont allow the registration of 2 Services that point to the same Route
+// TODO dont allow the registration of 2 Failures that handle the same Status
+
 /// the http server type
 pub struct Server {
     /// the server tcp listener socket
@@ -19,9 +22,6 @@ pub struct Server {
 // WARN when responding to a credentialed request, the CORS glob/* header value is not allowed for the following headers
 // Access-Control-Allow-Origin, Access-Control-Allow-Headers, Access-Control-Allow-Methods and Access-Control-Expose-Headers
 // TODO Server.origins { whitelist, blacklist }
-
-// TODO Route/Origin/URI ops
-// TODO Clean up the crate error types system
 
 impl Server {
     /// creates a new server
@@ -38,8 +38,6 @@ impl Server {
         Ok(Self {
             socket: {
                 let addr = addr.into();
-                // `impl From<io::Error> for PheasantError` is for this
-                // TODO remove impl From<io::Error> for PheasantError
                 let mut socket = TcpListener::bind((addr, port));
                 while socket.is_err() {
                     port += 1;
@@ -103,7 +101,9 @@ impl Server {
                 Ok((Status::Successful(Successful::NoContent), s))
             }
             None => Err(PheasantError::ClientError(ClientError::NotFound)),
-            Some(_) => unreachable!("unimplemented"),
+            Some(_) => unreachable!(
+                "logic break: the Service that matches the conditions didnt match the condititons"
+            ),
         }
     }
 
@@ -147,6 +147,9 @@ impl Server {
         send_response(stream, resp)
     }
 
+    // TODO this and Response::from_err have become redundant since (Failure.callback)() now returns
+    // a Response
+    // TODO fix Response mess
     pub async fn error_template(&self, code: u16, proto: Option<Protocol>) -> Response {
         let fail = self.fail_status(code);
         Response::from_err(fail, proto)

@@ -4,7 +4,7 @@ use crate::{ErrorStatus, Mime, Response, ResponseStatus};
 
 pub struct Failure {
     mime: Option<Mime>,
-    status: ErrorStatus,
+    status: u16,
     fail: BoxFun,
 }
 
@@ -18,14 +18,15 @@ type BoxFut<'a> = Pin<Box<dyn Future<Output = Response> + Send + 'a>>;
 type BoxFun = Box<dyn Fn() -> BoxFut<'static> + Send + Sync>;
 
 impl Failure {
-    pub fn new<F, O>(status: ErrorStatus, mime: &str, fun: F) -> Self
+    pub fn new<F, O>(status: u16, mime: Option<Mime>, fun: F) -> Self
     where
+        // probably give the Fn an input of ErrorStatus
         F: Fn() -> O + Send + Sync + 'static,
         O: Future<Output = Response> + Send + 'static,
     {
         Self {
             status,
-            mime: mime.parse().ok(),
+            mime,
             fail: Box::new(move || Box::pin(fun())),
         }
     }
@@ -35,7 +36,11 @@ impl Failure {
     }
 
     pub fn code(&self) -> u16 {
-        self.status.code()
+        self.status
+    }
+
+    pub fn status(&self) -> crate::Status {
+        self.status.try_into().unwrap()
     }
 
     pub fn fail(&self) -> &BoxFun {

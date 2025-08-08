@@ -249,25 +249,3 @@ fn read_body(v: &mut Vec<u8>, s: &mut BufReader<&mut TcpStream>, len: usize) -> 
 
     Ok(())
 }
-
-// parses the query params into key -> value pairs
-fn parse_query(query: &str) -> HashMap<String, String> {
-    query
-        .split('&')
-        // BUG this crashes the server when uri query is badly formatted
-        // TODO scan query after getting request and return ClientError::BadRequest if query is faulty
-        .map(|e| parse_param(e))
-        .map(|s| (s[0].to_string(), s[1].to_string()))
-        .collect()
-}
-
-// NOTE this handles the pain points of parse_query
-// the check for `=` garentees the operation's success
-fn parse_param(p: &str) -> [&str; 2] {
-    if p.contains('=') {
-        p.splitn(2, '=').collect::<Vec<&str>>().try_into().unwrap()
-    } else {
-        // TODO possibly make a HashSet of bool params alongside the HashMap of k -> v pairs
-        [p, "true"]
-    }
-}

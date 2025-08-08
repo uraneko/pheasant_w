@@ -4,8 +4,9 @@ use chrono::{DateTime, offset::Utc};
 use pheasant_uri::Origin;
 
 use crate::{
-    ClientError, Cookie, Cors, Failure, Header, HeaderMap, Mime, PheasantError, PheasantResult,
-    Protocol, Redirection, Request, ResponseStatus, ServerError, Service, Status, Successful,
+    ClientError, Cookie, Cors, ErrorStatus, Failure, Header, HeaderMap, Mime, PheasantError,
+    PheasantResult, Protocol, Redirection, Request, ResponseStatus, ServerError, Service, Status,
+    Successful,
 };
 
 // TODO also send redirection resource query with request redirections
@@ -100,6 +101,13 @@ impl Response {
             headers: cors.to_headers(origin),
             ..Default::default()
         }
+    }
+
+    pub fn failing(status: ErrorStatus) -> Self {
+        let mut resp = Self::default();
+        resp.update_status(status.into(), None, "");
+
+        resp
     }
 
     /// generates a response from a client/server error
@@ -206,7 +214,6 @@ impl Response {
     // returns bool indicating wether the update operation took place or not
     pub fn update_mime(&mut self, mime: Option<&Mime>) -> &mut Self {
         let Some(mime) = mime else { return self };
-        // TODO fix header traits
         self.set_header::<Mime>("Content-Type", mime.clone());
 
         self
@@ -272,8 +279,6 @@ impl Response {
     }
 }
 
-// TODO handle OPTIONS request
-
 impl HeaderMap for Response {
     fn header<H: Header>(&self, key: &str) -> Option<H> {
         self.headers.header(key)
@@ -298,82 +303,6 @@ fn mime(req: &Request, service: &Service) -> Mime {
 // could be the case for some archives or some image types
 fn is_already_compressed(mime: &Mime) -> bool {
     todo!()
-}
-
-/// umbrella fn for client error headers generation fns
-#[deprecated]
-async fn client_error(status: &ClientError) -> (HashMap<String, String>, Vec<u8>) {
-    match status {
-        ClientError::BadRequest => bad_request().await,
-        ClientError::NotFound => not_found().await,
-        _ => unimplemented!("the rest of the client error statuses are not yet implemented"),
-    }
-}
-
-#[deprecated]
-const BAD_REQUEST: &[u8] = include_bytes!("../templates/400.html");
-
-/// 400 client error header generation
-#[deprecated]
-async fn bad_request() -> (HashMap<String, String>, Vec<u8>) {
-    // let body = b"{\n\t'error': 'Bad Request'\n\t'message': 'Some redundant response body'\n}";
-    let body = BAD_REQUEST.to_vec();
-    let len = body.len();
-
-    (
-        HashMap::from([
-            ("Content-Type".into(), "text/html".into()),
-            ("Content-Length".into(), format!("{}", len)),
-        ]),
-        body,
-    )
-}
-
-#[deprecated]
-const NOT_FOUND: &[u8] = include_bytes!("../templates/404.html");
-
-/// 404 not found header generation
-#[deprecated]
-async fn not_found() -> (HashMap<String, String>, Vec<u8>) {
-    let body = NOT_FOUND.to_vec();
-    let len = body.len();
-
-    (
-        HashMap::from([
-            ("Content-Type".into(), "text/html".into()),
-            ("Content-Length".into(), format!("{}", len)),
-            ("Server".into(), SERVER.into()),
-            ("Date".into(), Header::to_string(&Utc::now())),
-        ]),
-        body,
-    )
-}
-
-/// wrapper fn for server errors headers generation fns
-#[deprecated]
-async fn server_error(status: &ServerError) -> (HashMap<String, String>, Vec<u8>) {
-    match status {
-        ServerError::HTTPVersionNotSupported => http_version_not_supported().await,
-        _ => unimplemented!("not yet implemeted status code; {}", file!()),
-    }
-}
-
-#[deprecated]
-const VERSION_NOT_SUPPORTED: &[u8] = include_bytes!("../templates/505.html");
-
-/// server error 505 response headers generation
-#[deprecated]
-async fn http_version_not_supported() -> (HashMap<String, String>, Vec<u8>) {
-    let body = VERSION_NOT_SUPPORTED.to_vec();
-    let len = body.len();
-
-    (
-        HashMap::from([
-            ("Content-Type".into(), "text/html".into()),
-            ("Content-Length".into(), format!("{}", len)),
-        ]),
-        body,
-    )
 }
 
 crate::impl_hdfs!(DateTime<Utc>, Origin);
