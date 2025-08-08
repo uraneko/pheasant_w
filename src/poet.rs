@@ -4,8 +4,8 @@ use std::collections::HashSet;
 use syn::{FnArg, Ident, ItemFn, PatType, Type, Visibility};
 
 use crate::{Mining, Plumber};
-use pheasant_core::{Cors, Method, Mime, Request};
-use pheasant_uri::{Origin, Route};
+use pheasant_core::{Cors, Method, Mime};
+use pheasant_uri::Route;
 
 #[derive(Debug)]
 pub struct Poet {
@@ -118,7 +118,7 @@ where
     match opt {
         Some(i) => {
             let i = i.into_iter();
-            quote! { HashSet::from([ #(#i,)* ]) }
+            quote! { std::collections::HashSet::from([ #(#i,)* ]) }
         }
         None => quote! { None },
     }
@@ -129,7 +129,7 @@ impl Inscriptions for Poet {
         if let Some(ref mime) = self.mime {
             let mime = mime.essence_str();
             quote! {
-                Some(Mime::macro_checked(#mime))
+                Some(pheasant::Mime::macro_checked(#mime))
             }
         } else {
             quote! { None }
@@ -138,7 +138,7 @@ impl Inscriptions for Poet {
 
     fn route(&self) -> TS2 {
         let s = self.route.as_str();
-        quote! { Route::macro_checked(#s) }
+        quote! { pheasant::Route::macro_checked(#s) }
     }
 
     fn origin_set(&self) -> TS2 {
@@ -150,15 +150,15 @@ impl Inscriptions for Poet {
 
         let origins = cors.cors_origins();
         if origins.is_any_origin() {
-            quote! { OriginSet::AnyOrigin }
+            quote! { pheasant::OriginSet::AnyOrigin }
         } else {
             let ori = origins.origins_ref().unwrap().into_iter().map(|ori| {
                 let s = ori.sequence();
 
-                quote! { #s.parse::<Origin>().unwrap() }
+                quote! { #s.parse::<pheasant::Origin>().unwrap() }
             });
 
-            quote! { OriginSet::macro_checked(HashSet::from([ #(#ori,)* ])) }
+            quote! { pheasant::OriginSet::macro_checked(std::collections::HashSet::from([ #(#ori,)* ])) }
         }
     }
 
@@ -168,17 +168,18 @@ impl Inscriptions for Poet {
             let headers = cors
                 .cors_headers()
                 .into_iter()
-                .map(|h| quote! { String::from(#h) });
-            let expose = cors
-                .cors_expose()
-                .map(|exp| exp.into_iter().map(|e| quote! { String::from(#e) }));
+                .map(|h| quote! { std::string::String::from(#h) });
+            let expose = cors.cors_expose().map(|exp| {
+                exp.into_iter()
+                    .map(|e| quote! { std::string::String::from(#e) })
+            });
             let expose = option_iter_quote(expose);
             let origins = self.origin_set();
             let max_age = cors.cors_max_age();
             let max_age = option_quote(max_age);
 
             quote! {
-                Some(Cors::macro_checked( HashSet::from([ #(#methods,)* ]),  HashSet::from([ #(#headers,)* ]), #expose,  #origins, #max_age))
+                Some(pheasant::Cors::macro_checked( std::collections::HashSet::from([ #(#methods,)* ]),  std::collections::HashSet::from([ #(#headers,)* ]), #expose,  #origins, #max_age))
             }
         } else {
             quote! { None }
@@ -192,10 +193,10 @@ impl Inscriptions for Poet {
             let re = re
                 .into_iter()
                 .map(|re| re.as_str())
-                .map(|re| quote! { Route::macro_checked(#re)  });
+                .map(|re| quote! { pheasant::Route::macro_checked(#re)  });
 
             quote! {
-                Some(HashSet::from([ #(#re,)* ]))
+                Some(std::collections::HashSet::from([ #(#re,)* ]))
             }
         } else {
             quote! { None }
@@ -227,7 +228,7 @@ pub trait ServiceInscriptions {
 }
 
 fn service(method: Method, route: &TS2, re: &TS2, mime: &TS2, cors: &TS2, fun: &Ident) -> TS2 {
-    quote! {Service::new(#method, #route, #re, #mime, #cors, #fun) }
+    quote! {pheasant::Service::new(pheasant::#method, #route, #re, #mime, #cors, #fun) }
 }
 
 impl ServiceInscriptions for Poet {
@@ -238,12 +239,47 @@ impl ServiceInscriptions for Poet {
         let service = fun.decorate_ident("_service");
         let arg = fun.user_argtype();
 
+        if self.decorated {
+            quote! {
+                #vis async fn #ident(i: #arg, p: pheasant::Protocol) -> pheasant::Response {
+                    let mut resp = #service(i).await;
+                    resp.update_proto(p);
+
+                    resp
+                }
+            }
+        } else {
+            quote! {
+                #vis async fn #ident(i: #arg, p: pheasant::Protocol) -> pheasant::Response {
+                    let mut resp = pheasant::Response::with_proto(p);
+                    let data = #service(i).await;
+                    resp.update_body(data);
+
+                    resp
+                }
+            }
+        }
+    }
+
+    fn assemble_preflight_fun(&self) -> TS2 {
+        let method = Method::Options;
+        let fun = &self.fun;
+        let vis = fun.vis();
+        let preflight = fun.decorate_ident("_preflight");
+        let service = fun.decorate_ident("_preflight_service");
+        let route = self.route.as_str();
+        let cors = self.cors();
+
         quote! {
-            #vis async fn #ident(i: #arg, p: Protocol) -> Response {
-                let mut resp = #service(i).await;
-                resp.update_proto(p);
+            #vis async fn #preflight(origin: pheasant::RequestOrigin) -> pheasant::Response {
+                let mut resp = pheasant::Response::preflight(& #cors, origin.origin());
+                res.update_status(pheasant::Status::Successful(pheasant::Successful::NoContent), None, "");
 
                 resp
+            }
+
+            #vis fn #service() -> pheasant::Service {
+                pheasant::Service::new(#method, #route, None, None, #cors, #preflight)
             }
         }
     }
@@ -251,7 +287,7 @@ impl ServiceInscriptions for Poet {
     fn assemble_bundler_fun(&self) -> TS2 {
         let fun = &self.fun;
         let vis = fun.vis();
-        let ident = fun.decorate_ident("_bundler");
+        let ident = fun.decorate_ident("");
         let route = self.route();
         let mime = self.mime();
         let re = self.re();
@@ -269,49 +305,26 @@ impl ServiceInscriptions for Poet {
                 &preflight,
             )
         });
-        let maybe_decorated = if self.decorated {
-            fun.decorate_ident("_decorator")
+        let decorated = fun.decorate_ident("_decorator");
+        let decorated = service(method, &route, &re, &mime, &cors, &decorated);
+        let (return_type, service_bundle) = if self.cors.is_some() {
+            (
+                Type::Verbatim("[phesant::Service; 2]".parse().unwrap()),
+                quote! {[
+                    #preflight,
+                    #decorated
+                ]},
+            )
         } else {
-            fun.decorate_ident("_service")
-        };
-        let maybe_decorated = service(method, &route, &re, &mime, &cors, &maybe_decorated);
-        let service_bundle = if self.cors.is_some() {
-            quote! {[
-                #preflight,
-            #maybe_decorated
-            ]}
-        } else {
-            quote! {#maybe_decorated}
+            (
+                Type::Verbatim("pheasant::Service".parse().unwrap()),
+                quote! {#decorated},
+            )
         };
 
         quote! {
-            #vis fn #ident<B>() -> B
-            where B: ServiceBundle,
-            {
+            #vis fn #ident() -> #return_type {
                 #service_bundle
-            }
-        }
-    }
-
-    fn assemble_preflight_fun(&self) -> TS2 {
-        let method = Method::Options;
-        let fun = &self.fun;
-        let vis = fun.vis();
-        let preflight = fun.decorate_ident("_preflight");
-        let service = fun.decorate_ident("_preflight_service");
-        let route = self.route.as_str();
-        let cors = self.cors();
-
-        quote! {
-            #vis async fn #preflight(origin: RequestOrigin) -> Response {
-                let mut resp = Response::preflight(& #cors, origin.origin());
-                res.update_status(Status::Successful(Successful::NoContent), None, "");
-
-                resp
-            }
-
-            #vis fn #service() -> Service {
-                Service::new(#method, #route, None, None, #cors, #preflight)
             }
         }
     }
@@ -320,7 +333,7 @@ impl ServiceInscriptions for Poet {
         let fun = &self.fun;
         let vis = fun.vis();
 
-        let decorator_fun = self.decorated.then(|| self.assemble_decorator_fun());
+        let decorator_fun = self.assemble_decorator_fun();
         let preflight_funs = self.cors.is_some().then(|| self.assemble_preflight_fun());
         // TODO still doesnt bundle preflight service in
         // TODO too many redundant assignments in the functions assemblers
@@ -339,25 +352,5 @@ impl ServiceInscriptions for Poet {
 
             #bundler_fun
         }
-    }
-}
-
-pub struct RequestOrigin(Option<Origin>);
-
-impl From<&Request> for RequestOrigin {
-    fn from(req: &Request) -> Self {
-        let Some(ori) = req.param("Origin") else {
-            return RequestOrigin(None);
-        };
-
-        let ori = ori.parse::<Origin>().unwrap();
-
-        Self(Some(ori))
-    }
-}
-
-impl RequestOrigin {
-    pub fn origin(&self) -> Option<&Origin> {
-        self.0.as_ref()
     }
 }

@@ -250,7 +250,7 @@ impl Parse for IntAttr {
 }
 
 impl IntAttr {
-    fn as_u16(&self) -> u16 {
+    pub fn as_u16(&self) -> u16 {
         self.0
     }
 }
