@@ -129,7 +129,7 @@ impl Server {
     // handles a tcp stream connection
     async fn handle_stream(&self, mut stream: TcpStream) -> PheasantResult<TcpStream> {
         let req = Request::from_stream(&mut stream);
-        println!("{:#?}", req); // if req is err we return a status error response
+        println!("{:#?}\n", req); // if req is err we return a status error response
         let Ok(req) = req else {
             let resp = self.error_template(400, None).await;
 

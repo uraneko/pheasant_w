@@ -30,7 +30,6 @@ impl Request {
         _ = read_req_line(&mut v, &mut reader)?;
         let (method, mut resource, proto) = parse_req_line(&mut v.drain(..))?;
         let (route, query) = (resource.take_route(), resource.take_query());
-        println!("parsed req line");
 
         let headers = read_parse_headers(&mut v, &mut reader)?;
 
@@ -103,6 +102,14 @@ impl Request {
         };
 
         query.contains_param(key)
+    }
+
+    pub fn contains_attr(&self, key: &str) -> bool {
+        let Some(ref query) = self.query else {
+            return false;
+        };
+
+        query.contains_attr(key)
     }
 
     // pub fn parse_query(&self) -> HashMap<&str, &str> {
@@ -192,7 +199,6 @@ fn parse_req_line(
             acc.push(b);
             acc
         });
-    println!("p -> {:?}", proto);
     let proto = Protocol::try_from(proto.as_slice())?;
 
     Ok((method, resource, proto))

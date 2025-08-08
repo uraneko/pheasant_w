@@ -1,225 +1,138 @@
 use crate::PheasantError;
+use std::fmt;
 
-/// http response server error status
-#[repr(u16)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum ServerError {
-    InternalServerError = 500,
-    NotImplemented = 501,
-    BadGateway = 502,
-    ServiceUnavailable = 503,
-    GatewayTimeout = 504,
-    HTTPVersionNotSupported = 505,
-    VariantAlsoNegotiates = 506,
-    InsufficientStorage = 507,
-    LoopDetected = 508,
-    NotExtended = 510,
-    NetworkAuthenticationRequired = 511,
-}
+macro_rules! status_enum {
+     ($name: ident, $($var: ident $code: literal),*) => {
+        #[repr(u16)]
+        #[derive(Debug, Clone, Copy, PartialEq,
+            Eq, Hash, serde::Serialize, serde::Deserialize)]
+         pub enum $name {$(
+             $var = $code,
+         )*}
 
-impl TryFrom<u16> for ServerError {
-    type Error = ();
+     impl $name {
+         pub fn str_lit(&self) -> &'static str {
+             match self {
+                 $(Self :: $var => stringify!($name::$var),)*
+             }
+         }
+     }
 
-    fn try_from(u: u16) -> Result<Self, Self::Error> {
-        match u {
-            500 => Ok(ServerError::InternalServerError),
-            501 => Ok(ServerError::NotImplemented),
-            502 => Ok(ServerError::BadGateway),
-            503 => Ok(ServerError::ServiceUnavailable),
-            504 => Ok(ServerError::GatewayTimeout),
-            505 => Ok(ServerError::HTTPVersionNotSupported),
-            506 => Ok(ServerError::VariantAlsoNegotiates),
-            507 => Ok(ServerError::InsufficientStorage),
-            508 => Ok(ServerError::LoopDetected),
-            510 => Ok(ServerError::NotExtended),
-            511 => Ok(ServerError::NetworkAuthenticationRequired),
-            _ => Err(()),
-        }
-    }
-}
+     impl std::str::FromStr for $name {
+         type Err = ();
+
+         fn from_str(s: &str) -> Result<Self,Self::Err> {
+             match s {
+                 $(stringify!($var) => Ok($name :: $var),)*
+                 _ => Err(()),
+             }
+         }
+     }
+
+    impl TryFrom<u16> for $name {
+         type Error = ();
+
+         fn try_from(u: u16) -> Result<Self, Self::Error> {
+            match u {
+                $($code => Ok(Self:: $var), )*
+                _ => Err(()),
+             }
+         }
+     }
+
+     };
+ }
+
+/// http response server error status,
+status_enum!(ServerError,
+    InternalServerError 500,
+    NotImplemented 501,
+    BadGateway 502,
+    ServiceUnavailable 503,
+    GatewayTimeout 504,
+    HTTPVersionNotSupported 505,
+    VariantAlsoNegotiates 506,
+    InsufficientStorage 507,
+    LoopDetected 508,
+    NotExtended 510,
+    NetworkAuthenticationRequired 511
+);
 
 /// http response client error status
-#[repr(u16)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum ClientError {
-    BadRequest = 400,
-    Unauthorized = 401,
+status_enum!(ClientError,
+    BadRequest 400,
+    Unauthorized 401,
     // NOTE rarely used
-    PaymentRequired = 402,
-    Forbidden = 403,
-    NotFound = 404,
-    MethodNotAllowed = 405,
-    NotAcceptable = 406,
-    ProxyAuthenticationRequired = 407,
-    RequestTimeout = 408,
-    Conflict = 409,
-    Gone = 410,
-    LengthRequired = 411,
-    PreconditionFailed = 412,
-    ContentTooLarge = 413,
-    URITooLong = 414,
-    UnsupportedMediaType = 415,
-    RangeNotSatisfiable = 416,
-    ExpectationFailed = 417,
-    Imateapot = 418,
-    MisdirectedRequest = 421,
-    UnprocessableContent = 422,
-    Locked = 423,
-    FailedDependency = 424,
-    TooEarly = 425,
-    UpgradeRequired = 426,
-    PreconditionRequired = 428,
-    TooManyRequests = 429,
-    RequestHeaderFieldsTooLarge = 431,
-    UnavailableForLegalReasons = 451,
-}
+    PaymentRequired 402,
+    Forbidden 403,
+    NotFound 404,
+    MethodNotAllowed 405,
+    NotAcceptable 406,
+    ProxyAuthenticationRequired 407,
+    RequestTimeout 408,
+    Conflict 409,
+    Gone 410,
+    LengthRequired 411,
+    PreconditionFailed 412,
+    ContentTooLarge 413,
+    URITooLong 414,
+    UnsupportedMediaType 415,
+    RangeNotSatisfiable 416,
+    ExpectationFailed 417,
+    Imateapot 418,
+    MisdirectedRequest 421,
+    UnprocessableContent 422,
+    Locked 423,
+    FailedDependency 424,
+    TooEarly 425,
+    UpgradeRequired 426,
+    PreconditionRequired 428,
+    TooManyRequests 429,
+    RequestHeaderFieldsTooLarge 431,
+    UnavailableForLegalReasons 451
+);
 
-impl TryFrom<u16> for ClientError {
-    type Error = ();
-
-    fn try_from(u: u16) -> Result<Self, Self::Error> {
-        match u {
-            // client errors
-            400 => Ok(ClientError::BadRequest),
-            401 => Ok(ClientError::Unauthorized),
-            // NOTE rarely used
-            402 => Ok(ClientError::PaymentRequired),
-            403 => Ok(ClientError::Forbidden),
-            404 => Ok(ClientError::NotFound),
-            405 => Ok(ClientError::MethodNotAllowed),
-            406 => Ok(ClientError::NotAcceptable),
-            407 => Ok(ClientError::ProxyAuthenticationRequired),
-            408 => Ok(ClientError::RequestTimeout),
-            409 => Ok(ClientError::Conflict),
-            410 => Ok(ClientError::Gone),
-            411 => Ok(ClientError::LengthRequired),
-            412 => Ok(ClientError::PreconditionFailed),
-            413 => Ok(ClientError::ContentTooLarge),
-            414 => Ok(ClientError::URITooLong),
-            415 => Ok(ClientError::UnsupportedMediaType),
-            416 => Ok(ClientError::RangeNotSatisfiable),
-            417 => Ok(ClientError::ExpectationFailed),
-            418 => Ok(ClientError::Imateapot),
-            421 => Ok(ClientError::MisdirectedRequest),
-            422 => Ok(ClientError::UnprocessableContent),
-            423 => Ok(ClientError::Locked),
-            424 => Ok(ClientError::FailedDependency),
-            425 => Ok(ClientError::TooEarly),
-            426 => Ok(ClientError::UpgradeRequired),
-            428 => Ok(ClientError::PreconditionRequired),
-            429 => Ok(ClientError::TooManyRequests),
-            431 => Ok(ClientError::RequestHeaderFieldsTooLarge),
-            451 => Ok(ClientError::UnavailableForLegalReasons),
-            _ => Err(()),
-        }
-    }
-}
+// #[deprecated(
+//     note = "This response code is no longer used; but is reserved. It was used in a previous version of the HTTP/1.1 specification.")]
+// Unused 306,
+// #[deprecated(
+//     note = "deprecated due to security concerns regarding in-band configuration of a proxy.")]
+// /// Defined in a previous version of the HTTP specification
+// /// to indicate that a requested response must be accessed by a proxy
+// UseProxyDeprecated 305,
 
 /// http response redirection status
-#[repr(u16)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum Redirection {
-    PermanentRedirect = 308,
-    TemporaryRedirect = 307,
-    #[deprecated(
-        note = "This response code is no longer used; but is reserved. It was used in a previous version of the HTTP/1.1 specification."
-    )]
-    Unused = 306,
-    #[deprecated(
-        note = "deprecated due to security concerns regarding in-band configuration of a proxy."
-    )]
-    /// Defined in a previous version of the HTTP specification
-    /// to indicate that a requested response must be accessed by a proxy
-    UseProxyDeprecated = 305,
-    NotModified = 304,
-    SeeOther = 303,
-    Found = 302,
-    MovedPermanently = 301,
-    MultipleChoices = 300,
-}
-
-impl TryFrom<u16> for Redirection {
-    type Error = ();
-
-    fn try_from(u: u16) -> Result<Self, Self::Error> {
-        match u {
-            308 => Ok(Self::PermanentRedirect),
-            307 => Ok(Self::TemporaryRedirect),
-            // #[deprecated(
-            306 => Ok(Self::Unused),
-            // #[deprecated(
-            // Defined in a previous version of the HTTP specification
-            // to indicate that a requested response must be accessed by a proxy
-            305 => Ok(Self::UseProxyDeprecated),
-            304 => Ok(Self::NotModified),
-            303 => Ok(Self::SeeOther),
-            302 => Ok(Self::Found),
-            301 => Ok(Self::MovedPermanently),
-            300 => Ok(Self::MultipleChoices),
-            _ => Err(()),
-        }
-    }
-}
+status_enum!(Redirection,
+    PermanentRedirect 308,
+    TemporaryRedirect 307,
+    NotModified 304,
+    SeeOther 303,
+    Found 302,
+    MovedPermanently 301,
+    MultipleChoices 300
+);
 
 /// http response successful status
-#[repr(u16)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum Successful {
-    IMUsed = 226,
-    AlreadyReported = 208,
-    MultiStatus = 207,
-    PartialContent = 206,
-    ResetContent = 205,
-    NoContent = 204,
-    NonAuthoritativeInformation = 203,
-    Accepted = 202,
-    Created = 201,
-    OK = 200,
-}
-
-impl TryFrom<u16> for Successful {
-    type Error = ();
-
-    fn try_from(u: u16) -> Result<Self, Self::Error> {
-        match u {
-            226 => Ok(Self::IMUsed),
-            208 => Ok(Self::AlreadyReported),
-            207 => Ok(Self::MultiStatus),
-            206 => Ok(Self::PartialContent),
-            205 => Ok(Self::ResetContent),
-            204 => Ok(Self::NoContent),
-            203 => Ok(Self::NonAuthoritativeInformation),
-            202 => Ok(Self::Accepted),
-            201 => Ok(Self::Created),
-            200 => Ok(Self::OK),
-            _ => Err(()),
-        }
-    }
-}
+status_enum!(Successful,
+    IMUsed 226,
+    AlreadyReported 208,
+    MultiStatus 207,
+    PartialContent 206,
+    ResetContent 205,
+    NoContent 204,
+    NonAuthoritativeInformation 203,
+    Accepted 202,
+    Created 201,
+    OK 200
+);
 
 /// http response informational status
-#[repr(u16)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum Informational {
-    EarlyHints = 103,
-    ProcessingDeprecated = 102,
-    SwitchingProtocols = 101,
-    Continue = 100,
-}
-
-impl TryFrom<u16> for Informational {
-    type Error = ();
-
-    fn try_from(u: u16) -> Result<Self, Self::Error> {
-        match u {
-            103 => Ok(Self::EarlyHints),
-            102 => Ok(Self::ProcessingDeprecated),
-            101 => Ok(Self::SwitchingProtocols),
-            100 => Ok(Self::Continue),
-            _ => Err(()),
-        }
-    }
-}
+status_enum!(Informational,
+    EarlyHints 103,
+    ProcessingDeprecated 102,
+    SwitchingProtocols 101,
+    Continue 100
+);
 
 impl From<PheasantError> for Status {
     fn from(err: PheasantError) -> Self {
@@ -307,8 +220,8 @@ impl ResponseStatus for Redirection {
         match self {
             Self::PermanentRedirect => "PermanentRedirect",
             Self::TemporaryRedirect => "TemporaryRedirect",
-            Self::Unused => "Unused",
-            Self::UseProxyDeprecated => "UseProxyDeprecated",
+            // Self::Unused => "Unused",
+            // Self::UseProxyDeprecated => "UseProxyDeprecated",
             Self::NotModified => "NotModified",
             Self::SeeOther => "SeeOther",
             Self::Found => "Found",
@@ -410,6 +323,37 @@ impl ResponseStatus for Status {
     }
 }
 
+/// request accpetance response status
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum GoodStatus {
+    Redirection(Redirection),
+    Informational(Informational),
+    Successful(Successful),
+}
+
+impl ResponseStatus for GoodStatus {
+    fn text(&self) -> &str {
+        match self {
+            Self::Informational(i) => i.text(),
+            Self::Successful(s) => s.text(),
+            Self::Redirection(re) => re.text(),
+        }
+    }
+
+    fn code(&self) -> u16 {
+        match self {
+            Self::Informational(i) => i.code(),
+            Self::Successful(s) => s.code(),
+            Self::Redirection(re) => re.code(),
+        }
+    }
+}
+
+// enum Status {
+//     Reject(ErrorStatus),
+//     Accept(AcceptStatus),
+// }
+
 /// error response status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ErrorStatus {
@@ -447,33 +391,68 @@ impl TryFrom<u16> for ErrorStatus {
     }
 }
 
-/// request accpetance response status
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum GoodStatus {
-    Redirection(Redirection),
-    Informational(Informational),
-    Successful(Successful),
-}
-
-impl ResponseStatus for GoodStatus {
-    fn text(&self) -> &str {
-        match self {
-            Self::Informational(i) => i.text(),
-            Self::Successful(s) => s.text(),
-            Self::Redirection(re) => re.text(),
-        }
-    }
-
-    fn code(&self) -> u16 {
-        match self {
-            Self::Informational(i) => i.code(),
-            Self::Successful(s) => s.code(),
-            Self::Redirection(re) => re.code(),
+impl From<ErrorStatus> for u16 {
+    fn from(err: ErrorStatus) -> u16 {
+        match err {
+            ErrorStatus::Client(ce) => ce.code(),
+            ErrorStatus::Server(se) => se.code(),
         }
     }
 }
 
-// enum Status {
-//     Reject(ErrorStatus),
-//     Accept(AcceptStatus),
-// }
+use proc_macro2::{Delimiter, Group, Punct, Spacing, Span, TokenStream as TS2, TokenTree};
+use quote::{ToTokens, TokenStreamExt};
+use syn::{Ident, Token};
+
+impl ErrorStatus {
+    fn str_lit(&self) -> &str {
+        match self {
+            Self::Client(ce) => ce.str_lit(),
+            Self::Server(se) => se.str_lit(),
+        }
+    }
+}
+
+impl ErrorStatus {
+    fn str_var(&self) -> &str {
+        match self {
+            Self::Server(_) => "Server",
+            Self::Client(_) => "Client",
+        }
+    }
+}
+
+impl ToTokens for ErrorStatus {
+    fn to_tokens(&self, tokens: &mut TS2) {
+        tokens.append(<ErrorStatus as Into<TokenTree>>::into(*self))
+    }
+}
+
+impl From<ErrorStatus> for TokenTree {
+    fn from(err: ErrorStatus) -> Self {
+        let [var, subtype, subvar] = {
+            let s = err.to_string();
+            let mut iter = s
+                .split("::")
+                .map(|s| Ident::new(s.trim(), Span::call_site()));
+
+            [
+                iter.next().unwrap(),
+                iter.next().unwrap(),
+                iter.next().unwrap(),
+            ]
+        };
+
+        Group::new(
+            Delimiter::None,
+            quote::quote! { ErrorStatus::#var(pheasant:: #subtype::#subvar) },
+        )
+        .into()
+    }
+}
+
+impl fmt::Display for ErrorStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}::{}", self.str_var(), self.str_lit())
+    }
+}

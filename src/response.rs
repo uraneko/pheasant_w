@@ -8,6 +8,9 @@ use crate::{
     Protocol, Redirection, Request, ResponseStatus, ServerError, Service, Status, Successful,
 };
 
+// TODO also send redirection resource query with request redirections
+// TODO support redirections for cors requests
+
 const SERVER: &str = "Pheasant (dev/0.1.0)";
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -148,7 +151,6 @@ impl Response {
     /// format the response into bytes to be sent to the client
     pub fn respond(self) -> Vec<u8> {
         println!("{:?}", self);
-        // serde_json::to_string(&self).unwrap().into_bytes()
         let mut payload = format!(
             "{} {} {}\n",
             self.proto,
@@ -237,39 +239,8 @@ impl Response {
         if let Some(cors) = service.cors()
             && let Some(origin) = req.header::<Origin>("Origin")
         {
-            if cors.allows_origin(&origin) {
-                // allow requesting origin
-                self.set_header("Access-Control-Allow-Origin", origin.to_owned());
-            }
-
-            // NOTE these hashset types cant be passed directly
-            // because set_header takes an owned value of H
-
-            // set allowed methods
-            let methods = cors.cors_methods();
-            if !methods.is_empty() {
-                self.set_header("Access-Control-Allow-Methods", methods.to_string());
-            }
-
-            // set allowed headers
-            let headers = cors.cors_headers();
-            if !headers.is_empty() {
-                self.set_header("Access-Control-Allow-Headers", headers.to_string());
-            }
-
-            // set allowed to expose headers
-            let expose = cors.cors_expose();
-            if let Some(expose) = expose
-                && !expose.is_empty()
-            {
-                self.set_header("Access-Control-Expose-Headers", expose.to_string());
-            }
-
-            // set allowed max options headers cache keeping duration
-            let max_age = cors.cors_max_age();
-            if let Some(max_age) = max_age {
-                self.set_header("Access-Control-Max-Age", max_age);
-            }
+            let origin = cors.allows_origin(&origin).then(|| &origin);
+            self.headers.extend(cors.to_headers(origin));
         }
 
         self
