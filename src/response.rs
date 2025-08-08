@@ -9,9 +9,6 @@ use crate::{
     Successful,
 };
 
-// TODO also send redirection resource query with request redirections
-// // this is probably caused by the type of redirection
-//
 // TODO support redirections for cors requests
 
 const SERVER: &str = "Pheasant (dev/0.1.0)";
@@ -194,6 +191,10 @@ impl Response {
         payload
     }
 }
+
+// BUG cors headers were set despite there being no cors attribute in the Service definition
+// the cross origin request still failed with client error Origin not set tho
+// not sure if they really were set at all, and when were they removed then
 
 impl Response {
     pub fn update_status(
