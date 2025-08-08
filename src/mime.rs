@@ -165,13 +165,19 @@ impl std::str::FromStr for Mime {
     }
 }
 
+impl fmt::Display for Mime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.essence_str())
+    }
+}
+
 impl Default for Mime {
     fn default() -> Self {
         Self(mime::APPLICATION_OCTET_STREAM)
     }
 }
 
-impl Header for Mime {}
+crate::impl_hdfs!(Mime);
 
 #[derive(Debug)]
 enum MimeError {

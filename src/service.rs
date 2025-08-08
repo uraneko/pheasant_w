@@ -52,7 +52,7 @@ impl Service {
     /// }
     /// ```
     ///
-    pub fn new<F, I, O, R>(
+    pub fn new<F, O, R>(
         method: Method,
         // TODO convert str to route at the macro level before getting here
         route: Route,
@@ -65,7 +65,6 @@ impl Service {
         F: Fn(R, Protocol) -> O + Send + Sync + 'static,
         O: Future<Output = Response> + Send + 'static,
         R: for<'a> From<&'a Request>,
-        I: IntoRoutes,
     {
         Self {
             method,

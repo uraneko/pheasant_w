@@ -180,7 +180,7 @@ fn parse_req_line(
     {
         val.push(b);
     }
-    let Ok(resource) = serde_json::from_slice::<Resource>(&val) else {
+    let Ok(resource) = str::from_utf8(&val).unwrap().parse::<Resource>() else {
         return Err(PheasantError::ClientError(ClientError::BadRequest));
     };
 
@@ -265,5 +265,3 @@ fn parse_param(p: &str) -> [&str; 2] {
         [p, "true"]
     }
 }
-
-impl Header for usize {}

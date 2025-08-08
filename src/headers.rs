@@ -1,14 +1,29 @@
 use std::collections::HashMap;
+use std::fmt::Display;
+use std::str::FromStr;
+
+#[macro_export]
+macro_rules! impl_hdfs {
+    ($($t: ty),*) => {
+        $(
+            impl Header for $t {
+                fn to_string(&self) -> String {
+                    <Self as ToString>::to_string(self)
+                }
+
+                fn from_str(s: &str) -> Self {
+                    s.parse::<Self>().unwrap()
+                }
+            }
+        )*
+    }
+}
 
 /// HTTP header conversion from/to String
-pub trait Header: serde::Serialize + serde::de::DeserializeOwned {
-    fn to_string(&self) -> String {
-        serde_json::to_string(&self).unwrap()
-    }
+pub trait Header {
+    fn to_string(&self) -> String;
 
-    fn from_str(s: &str) -> Self {
-        serde_json::from_str(s).unwrap()
-    }
+    fn from_str(s: &str) -> Self;
 }
 
 /// read and write headers of a request/response
@@ -36,7 +51,7 @@ pub trait HeaderMap {
 impl HeaderMap for HashMap<String, String> {
     fn header<H: Header>(&self, key: &str) -> Option<H> {
         // TODO handle the unwrap error case
-        self.get(key).map(|s| H::from_str(s))
+        self.get(key).map(|s| <H as Header>::from_str(s))
     }
 
     fn set_header<H: Header>(&mut self, key: &str, h: H) -> &mut Self {

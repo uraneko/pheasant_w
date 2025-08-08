@@ -48,7 +48,7 @@ pub struct Response {
 impl Response {
     /// generates a new Response template from a protocol value
     // NOTE this should be called `with_proto`
-    pub fn template(proto: Protocol) -> Self {
+    pub fn with_proto(proto: Protocol) -> Self {
         Self {
             proto,
             ..Default::default()
@@ -147,7 +147,7 @@ impl Response {
 
     /// format the response into bytes to be sent to the client
     pub fn respond(self) -> Vec<u8> {
-        println!("{:#?}", self);
+        println!("{:?}", self);
         // serde_json::to_string(&self).unwrap().into_bytes()
         let mut payload = format!(
             "{} {} {}\n",
@@ -157,18 +157,6 @@ impl Response {
         );
         let mut iter = self.headers.into_iter();
         while let Some((ref h, ref v)) = iter.next() {
-            // NOTE this
-            // ```
-            // if h.starts_with("Set-Cookie") {
-            //     h.trim_end_matches(char::is_numeric)
-            // } else {
-            //     h
-            // }
-            // ```
-            // should be cheaper than storing the
-            // cookies in a vec (would require another allocation)
-            // RE: seems like http2 allows many Cookie headers
-            // a vec would just be a better representative of Cookie/Set-Cookie headers
             payload.push_str(h);
             payload.push_str(": ");
             payload.push_str(v);
@@ -417,5 +405,4 @@ async fn http_version_not_supported() -> (HashMap<String, String>, Vec<u8>) {
     )
 }
 
-impl Header for DateTime<Utc> {}
-impl Header for Origin {}
+crate::impl_hdfs!(DateTime<Utc>, Origin);

@@ -373,3 +373,5 @@ impl ServiceBundle for Vec<Service> {
         self.into_iter()
     }
 }
+
+impl_hdfs!(usize, i64, String);

@@ -26,17 +26,14 @@ impl Cors {
     /// the args it takes are stringified from the correct values parsed and error handled in the
     /// macro
     pub fn macro_checked(
-        methods: HashSet<&str>,
+        methods: HashSet<Method>,
         headers: HashSet<String>,
         expose: Option<HashSet<String>>,
         origins: OriginSet,
         max_age: Option<i64>,
     ) -> Self {
         Self {
-            methods: methods
-                .into_iter()
-                .map(|m| m.parse::<Method>().unwrap())
-                .collect(),
+            methods,
             headers,
             expose,
             origins,
@@ -244,6 +241,3 @@ impl Header for HashSet<Method> {
         serde_json::from_str(&s).unwrap()
     }
 }
-
-impl Header for i64 {}
-impl Header for String {}
