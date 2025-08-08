@@ -159,13 +159,13 @@ impl ServiceInscriptions for ServicePoet {
     fn assemble_decorator_fun(&self) -> TS2 {
         let fun = &self.fun;
         let vis = fun.vis();
-        let ident = fun.decorate_ident("_decorator");
+        let decorated = fun.decorate_ident("_decorator");
         let service = fun.decorate_ident("_service");
         let arg = fun.user_argtype();
 
         if self.decorated {
             quote! {
-                #vis async fn #ident(i: #arg, p: pheasant::Protocol) -> pheasant::Response {
+                #vis async fn #decorated(i: #arg, p: pheasant::Protocol) -> pheasant::Response {
                     let mut resp = #service(i).await;
                     resp.update_proto(p);
 
@@ -174,7 +174,7 @@ impl ServiceInscriptions for ServicePoet {
             }
         } else {
             quote! {
-                #vis async fn #ident(i: #arg, proto: pheasant::Protocol) -> pheasant::Response {
+                #vis async fn #decorated(i: #arg, proto: pheasant::Protocol) -> pheasant::Response {
                     let mut resp = pheasant::Response::with_proto(proto);
                     let data = #service(i).await;
                     resp.update_body(data);
