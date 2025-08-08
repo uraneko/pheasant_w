@@ -136,7 +136,7 @@ where
     I: Iterator<Item = char>,
 {
     while let Some(letter) = chars.next() {
-        if !is_letter(letter) {
+        if letter == '/' {
             let tok = Token::word(group.drain(..));
             toks.push(tok);
 

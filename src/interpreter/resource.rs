@@ -119,7 +119,7 @@ impl<'de> Visitor<'de> for ResourceVisitor {
     type Value = Resource;
 
     fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("expecting str value of an absolute path url")
+        f.write_str("str value of an absolute path url")
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
