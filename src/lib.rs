@@ -115,21 +115,8 @@ impl ToTokens for Method {
 
 impl From<Method> for TokenTree {
     fn from(m: Method) -> Self {
-        let [ty, var] = {
-            let s = m.to_string();
-            let mut iter = s.split("::").map(|s| Ident::new(s, Span::call_site()));
-
-            [iter.next().unwrap(), iter.next().unwrap()]
-        };
-
-        let mut group = TS2::new();
-        group.append(ty);
-        group.append(Punct::new(':', Spacing::Joint));
-        group.append(Punct::new(':', Spacing::Alone));
-        group.append(var);
-        let group = Group::new(Delimiter::None, group);
-
-        TokenTree::from(group)
+        let var = Ident::new(&m.to_string(), Span::call_site());
+        Group::new(Delimiter::None, quote::quote! {Method::#var}).into()
     }
 }
 
@@ -137,7 +124,7 @@ impl fmt::Display for Method {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Method::{}{}",
+            "{}{}",
             self.as_str().chars().next().unwrap(),
             &self.as_str()[1..].to_lowercase(),
         )
