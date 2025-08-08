@@ -407,6 +407,7 @@ impl std::str::FromStr for Url {
 
     fn from_str(s: &str) -> ParseResult<Self> {
         let toks = lex(s);
+        println!("{:#?}", toks);
 
         parse_url(toks.into_iter())
     }

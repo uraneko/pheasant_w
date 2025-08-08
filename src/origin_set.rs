@@ -19,13 +19,13 @@ impl Default for OriginSet {
 }
 
 impl FromStr for OriginSet {
-    type Err = serde_json::Error;
+    type Err = TransmuteError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s == "*" {
             return Ok(Self::AnyOrigin);
         }
-        let origin = serde_json::from_str(s)?;
+        let origin = s.parse::<Origin>().unwrap();
 
         Ok(Self::WhiteList(HashSet::from([origin])))
     }

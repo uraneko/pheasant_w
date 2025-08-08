@@ -1,5 +1,6 @@
 use serde::de::{Deserialize, Deserializer, Error, Visitor};
 use serde::ser::{Serialize, SerializeTupleStruct, Serializer};
+use std::fmt;
 use std::str::FromStr;
 
 use super::TransmuteError;
@@ -29,6 +30,12 @@ impl TryFrom<Url> for Origin {
             domain: domain.join("."),
             port: url.port(),
         })
+    }
+}
+
+impl fmt::Display for Origin {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.sequence())
     }
 }
 

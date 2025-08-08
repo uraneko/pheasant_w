@@ -12,6 +12,8 @@ macro_rules! token {
             '#' => Token::Pound,
             '%' => Token::Percent,
             '*' => Token::Asterisk,
+            '-' => Token::Hyphen,
+            '_' => Token::Underscore,
             ' ' => Token::WhiteSpace,
             '@' => Token::AddressSign,
             '=' => Token::Equality,
@@ -36,6 +38,8 @@ pub enum Token {
     WhiteSpace,
     QuestionMark,
     Pound,
+    Hyphen,
+    Underscore,
     Colon,
     SemiColon,
     Comma,
@@ -82,6 +86,8 @@ impl Token {
             Self::SemiColon => ";",
             Self::Comma => ",",
             Self::Dot => ".",
+            Self::Hyphen => "-",
+            Self::Underscore => "_",
             Self::Slash => "/",
             Self::Percent => "%",
             Self::Asterisk => "*",
@@ -108,9 +114,9 @@ impl Token {
     }
 }
 
-const SYMBOLS: [char; 21] = [
+const SYMBOLS: [char; 23] = [
     '/', ':', ';', ',', '?', '!', '#', '%', '*', ' ', '@', '=', '&', '$', '\'', '+', '[', ']', '(',
-    ')', '.',
+    ')', '.', '_', '-',
 ];
 const DIGITS: RangeInclusive<char> = '0'..='9';
 const UC: RangeInclusive<char> = 'A'..='Z';
@@ -136,7 +142,7 @@ where
     I: Iterator<Item = char>,
 {
     while let Some(letter) = chars.next() {
-        if letter == '/' || letter == '?' {
+        if !is_letter(letter) {
             let tok = Token::word(group.drain(..));
             toks.push(tok);
 
