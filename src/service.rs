@@ -89,6 +89,7 @@ impl Service {
         self.method
     }
 
+    // TODO maybe change this to route_str
     /// returns a reference to the String value of the service route
     pub fn route(&self) -> &str {
         &self.route

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, offset::Utc};
-use pheasant_uri::Origin;
+use pheasant_uri::{Origin, Resource};
 
 use crate::{
     ClientError, Cookie, Cors, ErrorStatus, Failure, Header, HeaderMap, Mime, PheasantError,
@@ -10,6 +10,8 @@ use crate::{
 };
 
 // TODO also send redirection resource query with request redirections
+// // this is probably caused by the type of redirection
+//
 // TODO support redirections for cors requests
 
 const SERVER: &str = "Pheasant (dev/0.1.0)";
@@ -83,7 +85,10 @@ impl Response {
         } else {
             Some(mime)
         };
-        resp.update_status(status, mime, service.route());
+
+        let mut resource = req.query().map(|q| q.sequence()).unwrap_or_default();
+        resource.insert_str(0, service.route());
+        resp.update_status(status, mime, Some(resource));
 
         resp
     }
@@ -105,7 +110,7 @@ impl Response {
 
     pub fn failing(status: ErrorStatus) -> Self {
         let mut resp = Self::default();
-        resp.update_status(status.into(), None, "");
+        resp.update_status(status.into(), None, None);
 
         resp
     }
@@ -121,7 +126,7 @@ impl Response {
 
         let mut resp = (fail.fail())().await;
         resp.update_mime(fail.mime());
-        resp.update_status(fail.code().try_into().unwrap(), None, "");
+        resp.update_status(fail.code().try_into().unwrap(), None, None);
         resp.update_proto(proto.unwrap_or_default());
 
         Ok(resp)
@@ -191,11 +196,16 @@ impl Response {
 }
 
 impl Response {
-    pub fn update_status(&mut self, status: Status, mime: Option<Mime>, route: &str) -> &mut Self {
+    pub fn update_status(
+        &mut self,
+        status: Status,
+        mime: Option<Mime>,
+        resource: Option<String>,
+    ) -> &mut Self {
         match status {
             Status::Informational(i) => (),
             Status::Successful(s) => self.successful(mime),
-            Status::Redirection(r) => self.redirection(route),
+            Status::Redirection(r) => self.redirection(resource.unwrap()),
             _ => (),
         }
 
@@ -271,10 +281,8 @@ impl Response {
         }
     }
 
-    // this doesnt need to be async
-    // there is no system IO going on here
-    fn redirection(&mut self, route: &str) {
-        self.set_header::<String>("Location".into(), route.into())
+    fn redirection(&mut self, resource: String) {
+        self.set_header::<String>("Location".into(), resource)
             .set_header("Content-Length".into(), 0usize);
     }
 }

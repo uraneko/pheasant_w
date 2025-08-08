@@ -75,8 +75,12 @@ impl Request {
 
     /// if the request has a query, this returns a reference to it,
     /// otherwise, returns `None`
-    pub fn query(&mut self) -> Option<&Query> {
+    pub fn query(&self) -> Option<&Query> {
         self.query.as_ref()
+    }
+
+    pub fn take_query(&mut self) -> Option<Query> {
+        std::mem::take(&mut self.query)
     }
 
     /// checks if this request has a query
