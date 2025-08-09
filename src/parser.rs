@@ -95,7 +95,7 @@ where
 {
     match toks.next().unwrap() {
         // either scheme... or path...
-        Token::Word(w) => {
+        Token::Seq(w) => {
             let scheme = w.parse::<Scheme>().ok();
             url.update_scheme(scheme);
             if url.scheme.is_none() {
@@ -125,7 +125,7 @@ where
                     return parse_scheme_relative(toks, url);
                 }
                 // /{path}
-                Token::Word(path) => {
+                Token::Seq(path) => {
                     return parse_path_absolute(toks, url, path);
                 }
                 _ => return Err(ParseError::url(0).unwrap()),
@@ -154,7 +154,7 @@ where
     let mut last = Last::Item;
     while let Some(t) = toks.next() {
         match t {
-            Token::Word(d) => {
+            Token::Seq(d) => {
                 if last == Last::Item && !domain.is_empty() {
                     return Err(ParseError::url(0).unwrap());
                 }
@@ -201,7 +201,7 @@ where
     let mut last = Last::Item;
     while let Some(t) = toks.next() {
         match t {
-            Token::Word(s) | Token::Number(s) => {
+            Token::Seq(s) | Token::Seq(s) => {
                 if last == Last::Sep || path.is_empty() {
                     path.push(s);
                 } else {
@@ -267,7 +267,7 @@ where
     let mut last = Last::Sep;
     while let Some(t) = toks.next() {
         match t {
-            Token::Word(s) | Token::Number(s) => {
+            Token::Seq(s) => {
                 if last == Last::Sep || path.is_empty() {
                     path.push(s);
                 } else {
@@ -327,7 +327,7 @@ fn parse_port<I>(mut toks: I, mut url: Url) -> ParseResult<Url>
 where
     I: Iterator<Item = Token>,
 {
-    let Some(Token::Number(num)) = toks.next() else {
+    let Some(Token::Seq(num)) = toks.next() else {
         return Err(ParseError::url(0).unwrap());
     };
 
@@ -407,7 +407,6 @@ impl std::str::FromStr for Url {
 
     fn from_str(s: &str) -> ParseResult<Self> {
         let toks = lex(s);
-        println!("{:#?}", toks);
 
         parse_url(toks.into_iter())
     }

@@ -6,10 +6,16 @@ use super::TransmuteError;
 use super::route::Route;
 use crate::{Query, Url};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Resource {
     route: Route,
     query: Option<Query>,
+}
+
+impl Resource {
+    pub fn from_parts(route: Route, query: Option<Query>) -> Self {
+        Self { route, query }
+    }
 }
 
 impl std::str::FromStr for Resource {

@@ -15,6 +15,14 @@ path = "tests/lex.rs"
 name = "dev"
 path = "src/main.rs"
 
+[[bin]]
+name = "finder"
+path = "benches/finder.rs"
+
+[[bin]]
+name = "lexer"
+path = "benches/lexer.rs"
+
 [dependencies]
 proc-macro2 = "1.0.95"
 quote = "1.0.40"
