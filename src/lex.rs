@@ -14,7 +14,7 @@ macro_rules! token {
     };
 }
 
-const SEPS: [char; 7] = ['@', '/', ':', '?', '#', '=', '&'];
+const SEPS: [char; 8] = ['@', '/', ':', '?', '#', '=', '&', '.'];
 
 fn find_all(mut s: &str, ch: char) -> Vec<(usize, char)> {
     let mut v = vec![];
@@ -60,6 +60,23 @@ impl Token {
             Self::Dot => ".",
         }
     }
+
+    pub fn to_char(&self) -> Option<char> {
+        match self {
+            Self::Seq(s) => None,
+            token => Some(match token {
+                Self::Seq(_) => unreachable!("matched out 2 line ago"),
+                Self::QuestionMark => '?',
+                Self::Pound => '#',
+                Self::Colon => ':',
+                Self::Slash => '/',
+                Self::AddressSign => '@',
+                Self::Equality => '=',
+                Self::AmperSand => '&',
+                Self::Dot => '.',
+            }),
+        }
+    }
 }
 
 // TODO return Result + error accordingly following the standard
@@ -71,14 +88,25 @@ pub fn lex(mut s: &str) -> Vec<Token> {
         .collect::<Vec<(usize, char)>>();
     breakpoints.sort_by(|a, b| a.0.cmp(&b.0));
 
-    let mut v = vec![];
     let mut last = 0;
-    let mut iter = breakpoints.into_iter();
-    while let Some((idx, ch)) = iter.next() {
-        v.extend([Token::seq(&s[..idx - last]), token!(ch)]);
-        s = &s[idx + 1 - last..];
-        last = idx + 1;
-    }
+    let mut v = breakpoints
+        .into_iter()
+        .map(|(idx, ch)| {
+            let toks = if idx > last {
+                Some(vec![Token::seq(&s[..idx - last]), token!(ch)])
+            } else {
+                Some(vec![token!(ch)])
+            };
+
+            s = &s[idx + 1 - last..];
+            last = idx + 1;
+
+            toks
+        })
+        .map(|toks| toks.unwrap())
+        .flatten()
+        .collect::<Vec<Token>>();
+
     v.push(Token::seq(s));
 
     v

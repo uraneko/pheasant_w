@@ -15,7 +15,7 @@ impl std::str::FromStr for Route {
     type Err = TransmuteError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse::<Url>().unwrap().downcast::<Self>()
+        s.parse::<Url>().unwrap().interpret::<Self>()
     }
 }
 

@@ -1,16 +1,15 @@
 use std::time::{Duration, Instant};
 
 fn main() {
-    let s =
-        "http://127.0.0.1:9998/ftree?path=src&ssr&file=_File_1eed6_1&dir=_Dir_1eed6_13&chidren=_Ch
-ildren_1eed6_22&parent=_Parent_1eed6_20";
-    let ch = 'h';
+    let s = "http://127.0.0.1:9998/ftree?path=src&ssr&file=_File_1eed6_1&dir=_Dir_1eed6_13&chidren=_Children_1eed6_22&parent=_Parent_1eed6_20";
+
+    println!("{}", s);
 
     // NOTE realease mode: by_map seems twice as fast
     println!("by_while---> {:?}", bench(s, by_while));
     println!("by_map   ---> {:?}", bench(s, by_map));
     // println!("{}", by_map(s) == by_while(s));
-    // println!("by_while\n{:#?}", by_while(s));
+    println!("by_while\n{:?}", by_while(s));
     // println!("by_map\n{:#?}", by_map(s));
 }
 
@@ -37,7 +36,7 @@ macro_rules! token {
     };
 }
 
-const SEPS: [char; 7] = ['@', '/', ':', '?', '#', '=', '&'];
+const SEPS: [char; 8] = ['@', '/', ':', '?', '#', '=', '&', '.'];
 
 fn find_all(mut s: &str, ch: char) -> Vec<(usize, char)> {
     let mut v = vec![];
@@ -97,7 +96,11 @@ fn by_while(mut s: &str) -> Vec<Token> {
     let mut last = 0;
     let mut iter = breakpoints.into_iter();
     while let Some((idx, ch)) = iter.next() {
-        v.extend([Token::seq(&s[..idx - last]), token!(ch)]);
+        if idx > last {
+            v.extend([Token::seq(&s[..idx - last]), token!(ch)]);
+        } else {
+            v.push(token!(ch));
+        }
         s = &s[idx + 1 - last..];
         last = idx + 1;
     }
@@ -119,12 +122,18 @@ fn by_map(mut s: &str) -> Vec<Token> {
     let mut v = breakpoints
         .into_iter()
         .map(|(idx, ch)| {
-            let toks = [Token::seq(&s[..idx - last]), token!(ch)];
+            let toks = if idx > last {
+                Some(vec![Token::seq(&s[..idx - last]), token!(ch)])
+            } else {
+                Some(vec![token!(ch)])
+            };
+
             s = &s[idx + 1 - last..];
             last = idx + 1;
 
             toks
         })
+        .map(|toks| toks.unwrap())
         .flatten()
         .collect::<Vec<Token>>();
 

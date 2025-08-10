@@ -8,29 +8,29 @@ pub enum ParseError {
 pub type ParseResult<T> = Result<T, ParseError>;
 
 impl ParseError {
-    pub fn idna(repr: u8) -> Result<Self, ()> {
+    pub fn idna(repr: u8) -> Result<(), Self> {
         if repr > 2 {
-            return Err(());
+            return Ok(());
         }
-        Ok(Self::Idna(unsafe {
+        Err(Self::Idna(unsafe {
             std::mem::transmute::<u8, IDNAError>(repr)
         }))
     }
 
-    pub fn host(repr: u8) -> Result<Self, ()> {
+    pub fn host(repr: u8) -> Result<(), Self> {
         if repr > 15 {
-            return Err(());
+            return Ok(());
         }
-        Ok(Self::Host(unsafe {
+        Err(Self::Host(unsafe {
             std::mem::transmute::<u8, HostError>(repr)
         }))
     }
 
-    pub fn url(repr: u8) -> Result<Self, ()> {
+    pub fn url(repr: u8) -> Result<(), Self> {
         if repr > 9 {
-            return Err(());
+            return Ok(());
         }
-        Ok(Self::Url(unsafe {
+        Err(Self::Url(unsafe {
             std::mem::transmute::<u8, URLError>(repr)
         }))
     }

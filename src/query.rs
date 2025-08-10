@@ -11,12 +11,33 @@ pub struct Query {
 }
 
 impl Query {
-    fn insert_param(&mut self, k: &str, v: &str) {
-        self.params.insert(k.to_owned(), v.to_owned());
+    pub fn insert_param<S>(&mut self, k: S, v: S)
+    where
+        S: Into<String>,
+    {
+        self.params.insert(k.into(), v.into());
     }
 
-    fn insert_attr(&mut self, a: &str) {
-        self.attrs.insert(a.to_owned());
+    pub fn insert_attr<S>(&mut self, a: S)
+    where
+        S: Into<String>,
+    {
+        self.attrs.insert(a.into());
+    }
+
+    pub fn insert_iter_param<I>(&mut self, k: I, v: I)
+    where
+        I: IntoIterator<Item = char>,
+    {
+        self.params
+            .insert(k.into_iter().collect(), v.into_iter().collect());
+    }
+
+    pub fn insert_iter_attr<I>(&mut self, a: I)
+    where
+        I: IntoIterator<Item = char>,
+    {
+        self.attrs.insert(a.into_iter().collect());
     }
 
     pub fn params(&self) -> &HashMap<String, String> {
