@@ -18,7 +18,6 @@ pub enum Parser {
 impl Parser {
     pub fn new(uri: &str) -> Option<Self> {
         let tokens = lex(uri);
-        println!("{:?}", tokens);
 
         Some(Self::Prologue(PrologueParser::new(tokens)?))
     }
@@ -79,7 +78,7 @@ impl PrologueParser {
             Token::Seq(s) => self.parse_seq(s),
             // domain | path
             Token::Slash => self.parse_slash(),
-            _ => return ParseError::url(0).map(|_| unsafe { std::mem::zeroed() }),
+            _ => ParseError::url(0).map(|_| unsafe { std::mem::zeroed() }),
         }
     }
 
@@ -89,7 +88,7 @@ impl PrologueParser {
 
             Ok(Parser::Domain(DomainParser::new(self)))
         } else {
-            Ok(Parser::Path(PathParser::new(self)))
+            Ok(Parser::Path(PathParser::with_seq(self, seq)))
         }
     }
 
@@ -98,7 +97,7 @@ impl PrologueParser {
             // domain incoming
             Some(Token::Slash) => Ok(Parser::Domain(DomainParser::scheme_relative(self))),
             // path starts from value s
-            Some(Token::Seq(s)) => Ok(Parser::Path(PathParser::no_sep(self, s))),
+            Some(Token::Seq(s)) => Ok(Parser::Path(PathParser::with_sep(self, s))),
             // error unexpected token
             Some(_) => Err(ref_res(ParseError::url(0)).unwrap()),
             // 1 slash token stream means a root route (path absolute url)
@@ -154,7 +153,7 @@ impl Parsing for DomainParser {
         self.tokens.next()
     }
 }
-impl Parsing for PathParser {}
+
 impl Parsing for EpilogueParser {
     fn is_epilogue(&self) -> bool {
         true
@@ -386,18 +385,24 @@ pub struct PathParser {
     trailing_slash: bool,
 }
 
+impl Parsing for PathParser {
+    fn next(&mut self) -> Option<Token> {
+        self.tokens.next()
+    }
+}
+
 impl PathParser {
-    fn new(parser: PrologueParser) -> Self {
+    fn with_seq(parser: PrologueParser, s: String) -> Self {
         Self {
             tokens: parser.tokens,
-            path: vec![],
+            path: vec![s],
             query: None,
             sep_start: true,
             trailing_slash: false,
         }
     }
 
-    fn no_sep(parser: PrologueParser, token: String) -> Self {
+    fn with_sep(parser: PrologueParser, token: String) -> Self {
         Self {
             tokens: parser.tokens,
             path: vec![token],
@@ -418,23 +423,16 @@ impl PathParser {
             .ok_or_else(|| ref_res(ParseError::url(0)).unwrap())
     }
 
-    fn assign_query(&mut self, s: String) -> Result<(), ParseError> {
-        let query = s.parse::<Query>();
-        if query.is_err() {
-            return Err(ref_res(ParseError::url(0)).unwrap());
-        }
-        self.query = Some(query.unwrap());
-
-        Ok(())
-    }
-
     fn parse(mut self) -> PRslt {
         match self.next() {
             // we parse path
-            Some(Token::Seq(s)) if self.sep_start => self.parse_path(s),
+            Some(Token::Seq(seq)) if self.sep_start => {
+                self.path.last_mut().map(|s| s.push_str(&seq));
+
+                self.parse_path()
+            }
             // unreachable, assuming that path (cant start with a separator token/started with seq)
             Some(Token::Seq(_)) if !self.sep_start => Err(ref_res(ParseError::url(0)).unwrap()),
-            // root path then query: domain?query | domain/?query
             Some(Token::QuestionMark) => self.parse_query(),
             // root path then fragment: domain#fragment | domain/#fragment
             Some(Token::Pound) => {
@@ -445,11 +443,17 @@ impl PathParser {
                 if s.is_none() {
                     return Ok(Parser::Epilogue(EpilogueParser::new(self, parse_end)));
                 }
+                self.push(s.unwrap())?;
 
-                self.parse_path(s.unwrap())
+                self.parse_path()
             }
-            Some(_) => Err(ref_res(ParseError::url(0)).unwrap()),
-            // basically url = '//', which we interpret as '/' which is just a root path Route
+            Some(token) => {
+                self.path
+                    .last_mut()
+                    .map(|s| s.push(token.to_char().unwrap()));
+                self.parse_path()
+            }
+
             None => Ok(Parser::Epilogue(EpilogueParser::new(self, parse_end))),
         }
     }
@@ -465,30 +469,17 @@ impl PathParser {
         }
     }
 
-    fn parse_path(mut self, s: String) -> PRslt {
-        self.push(s);
-        let mut trailing = true;
+    fn parse_path(mut self) -> PRslt {
+        let mut trailing = false;
 
         loop {
             match self.next() {
                 Some(Token::Seq(seq)) => {
                     if trailing {
-                        self.push(seq);
+                        self.push(seq)?;
                     } else {
                         self.path.last_mut().map(|s| s.push_str(&seq));
                     }
-                }
-                Some(token) if Self::is_valid_sep(&token) => {
-                    if trailing {
-                        self.push(token.as_str().to_owned());
-                    } else {
-                        self.path
-                            .last_mut()
-                            .map(|s| s.push(token.to_char().unwrap()));
-                    }
-                }
-                Some(token) if !Self::is_valid_sep(&token) => {
-                    return Err(ref_res(ParseError::url(0)).unwrap());
                 }
                 Some(Token::Slash) => trailing = true,
                 Some(Token::QuestionMark) => return self.parse_query(),
@@ -496,7 +487,23 @@ impl PathParser {
                     return Ok(Parser::Epilogue(EpilogueParser::new(self, parse_fragment)));
                 }
 
-                None => return Ok(Parser::Epilogue(EpilogueParser::new(self, parse_end))),
+                Some(token) => {
+                    if !Self::is_valid_sep(&token) {
+                        return Err(ref_res(ParseError::url(0)).unwrap());
+                    }
+
+                    if trailing {
+                        self.push(token.as_str().to_owned())?;
+                    } else {
+                        self.path
+                            .last_mut()
+                            .map(|s| s.push(token.to_char().unwrap()));
+                    }
+                }
+
+                None => {
+                    return Ok(Parser::Epilogue(EpilogueParser::new(self, parse_end)));
+                }
                 _ => unreachable!("match_sep should satisfy separator token exhaustively"),
             }
         }
@@ -526,11 +533,20 @@ impl PathParser {
                     } else {
                         query.insert_iter_param(key.drain(..), val.drain(..));
                     }
+
+                    atkey = true;
                 }
 
-                Some(Token::Equality) => atkey = !atkey,
+                Some(Token::Equality) => atkey = false,
 
                 Some(Token::Pound) => {
+                    if atkey {
+                        query.insert_iter_attr(key.drain(..));
+                    } else {
+                        query.insert_iter_param(key.drain(..), val.drain(..));
+                    }
+                    self.query = Some(query);
+
                     return Ok(Parser::Epilogue(EpilogueParser::new(self, parse_fragment)));
                 }
 
@@ -547,7 +563,16 @@ impl PathParser {
                     }
                 }
 
-                None => return Ok(Parser::Epilogue(EpilogueParser::new(self, parse_end))),
+                None => {
+                    if atkey {
+                        query.insert_iter_attr(key.drain(..));
+                    } else {
+                        query.insert_iter_param(key.drain(..), val.drain(..));
+                    }
+                    self.query = Some(query);
+
+                    return Ok(Parser::Epilogue(EpilogueParser::new(self, parse_end)));
+                }
             }
         }
     }
@@ -609,7 +634,11 @@ impl AbsoluteParser {
     fn parse(mut self) -> PRslt {
         match self.next() {
             // we parse path
-            Some(Token::Seq(s)) if self.sep_start => self.parse_path(s),
+            Some(Token::Seq(s)) if self.sep_start => {
+                self.push(s)?;
+
+                self.parse_path()
+            }
             // unreachable, assuming that path (cant start with a separator token/started with seq)
             Some(Token::Seq(_)) if !self.sep_start => Err(ref_res(ParseError::url(0)).unwrap()),
             // root path then query: domain?query | domain/?query
@@ -623,10 +652,14 @@ impl AbsoluteParser {
                 if s.is_none() {
                     return Ok(Parser::Epilogue(EpilogueParser::new(self, parse_end)));
                 }
+                self.push(s.unwrap())?;
 
-                self.parse_path(s.unwrap())
+                self.parse_path()
             }
-            Some(_) => Err(ref_res(ParseError::url(0)).unwrap()),
+            Some(token) => {
+                self.push(token.as_str().to_owned())?;
+                self.parse_path()
+            }
             // basically url = '//', which we interpret as '/' which is just a root path Route
             None => Ok(Parser::Epilogue(EpilogueParser::new(self, parse_end))),
         }
@@ -643,9 +676,8 @@ impl AbsoluteParser {
         }
     }
 
-    fn parse_path(mut self, s: String) -> PRslt {
-        self.push(s)?;
-        let mut trailing = true;
+    fn parse_path(mut self) -> PRslt {
+        let mut trailing = false;
 
         loop {
             match self.next() {

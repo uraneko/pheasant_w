@@ -210,7 +210,6 @@ impl Url {
         };
 
         if let Some(ref query) = self.query.as_ref().map(|q| q.sequence()) {
-            path.push('?');
             path.push_str(query);
         }
 

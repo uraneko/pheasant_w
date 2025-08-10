@@ -83,6 +83,7 @@ impl Query {
             .fold("".to_owned(), |acc, (k, v)| acc + k + "=" + v + "&");
         seq = self.attrs.iter().fold(seq, |acc, a| acc + a + "&");
         seq.insert(0, '?');
+        seq.pop();
 
         seq
     }
