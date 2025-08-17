@@ -10,3 +10,4 @@ pub use pheasant_uri::{Origin, OriginSet, Resource, Route, Url};
 // macro exports
 pub use pheasant_macro_fail::fail;
 pub use pheasant_macro_get::get;
+pub use pheasant_macro_post::post;

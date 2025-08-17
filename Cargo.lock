@@ -460,6 +460,7 @@ dependencies = [
  "pheasant_core",
  "pheasant_macro_fail",
  "pheasant_macro_get",
+ "pheasant_macro_post",
  "pheasant_macro_utils",
  "pheasant_uri",
 ]
@@ -492,6 +493,13 @@ dependencies = [
 [[package]]
 name = "pheasant_macro_get"
 version = "0.1.1"
+dependencies = [
+ "pheasant_macro_utils",
+]
+
+[[package]]
+name = "pheasant_macro_post"
+version = "0.1.0"
 dependencies = [
  "pheasant_macro_utils",
 ]
