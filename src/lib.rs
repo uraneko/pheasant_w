@@ -22,6 +22,7 @@ pub mod response;
 pub mod server;
 pub mod service;
 pub mod status;
+pub mod tls;
 
 pub use cookies::Cookie;
 pub use cors::Cors;
@@ -36,6 +37,7 @@ pub use status::{
     ClientError, ErrorStatus, Informational, Redirection, ResponseStatus, ServerError, Status,
     Successful,
 };
+pub use tls::*;
 
 // TODO service macro attr status
 // this lets the user pick their status code of choice for their service's response
