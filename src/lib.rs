@@ -37,6 +37,22 @@ pub use status::{
     Successful,
 };
 
+// TODO service macro attr status
+// this lets the user pick their status code of choice for their service's response
+//
+// TODO service macro attr resolve
+// this lets the user decide what error code their function
+// would fail to if needed
+//
+// requires that the chosen failure status has a registered failure service with the server
+// (server.failure(...))
+//
+
+// BUG cross origin POST request ran normally despite only GET method being specified in the
+// Access-Control-Allow-Methods header
+// this appears to be caused by firefox only sending an Origin header with the Post request
+// there was no requesting from firefox's side for any methods or headers, only the client origin
+
 pub type PheasantResult<T> = Result<T, PheasantError>;
 
 /// crate's main error type

@@ -9,8 +9,6 @@ use crate::{
     Successful,
 };
 
-// TODO support redirections for cors requests
-
 const SERVER: &str = "Pheasant (dev/0.1.0)";
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]

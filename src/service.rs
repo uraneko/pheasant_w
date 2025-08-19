@@ -95,6 +95,10 @@ impl Service {
         &self.route
     }
 
+    pub fn re(&self) -> Option<&HashSet<Route>> {
+        self.redirects.as_ref()
+    }
+
     // returns a ref to the Mime type if it was provided
     //
     // otherwise returns None

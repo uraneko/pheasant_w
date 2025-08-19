@@ -67,7 +67,7 @@ impl Server {
         self
     }
 
-    pub fn failure<E>(&mut self, e: E) -> &mut Self
+    pub fn error<E>(&mut self, e: E) -> &mut Self
     where
         E: Fn() -> Failure,
     {
@@ -88,14 +88,19 @@ impl Server {
         method: Method,
         route: &str,
     ) -> PheasantResult<(Status, &Service)> {
-        match self.services.iter().find(move |s| {
-            if method == Method::Options {
-                s.method() == Method::Options
-                    && (s.route() == route || self.services.iter().any(|s| s.redirects_to(route)))
-            } else {
-                s.method() == method && (s.route() == route || s.redirects_to(&route))
-            }
-        }) {
+        match self
+            .services
+            .iter()
+            // .inspect(|s| println!("{}:{:?}", s.route(), s.re()))
+            .find(move |s| {
+                if method == Method::Options {
+                    s.method() == Method::Options
+                        && (s.route() == route
+                            || self.services.iter().any(|s| s.redirects_to(route)))
+                } else {
+                    s.method() == method && (s.route() == route || s.redirects_to(&route))
+                }
+            }) {
             Some(s) if s.route() == route => Ok((Status::Successful(Successful::OK), s)),
             Some(s) if s.redirects_to(&route) => {
                 Ok((Status::Redirection(Redirection::SeeOther), s))

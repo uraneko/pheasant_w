@@ -116,6 +116,10 @@ impl Request {
         query.contains_attr(key)
     }
 
+    pub fn body(&self) -> Option<&str> {
+        self.body.as_ref().map(|s| s.as_str())
+    }
+
     // pub fn parse_query(&self) -> HashMap<&str, &str> {
     //     self
     //         .query
@@ -252,4 +256,10 @@ fn read_body(v: &mut Vec<u8>, s: &mut BufReader<&mut TcpStream>, len: usize) -> 
     s.read_exact(v)?;
 
     Ok(())
+}
+
+impl From<&Request> for Request {
+    fn from(req: &Request) -> Self {
+        req.clone()
+    }
 }
