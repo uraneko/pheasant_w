@@ -71,8 +71,8 @@ impl FailureInscriptions for FailurePoet {
 
         (!self.decorated).then(|| {
             quote! {
-            #vis async fn #decorated() -> Response {
-                let mut resp = Response::failing(#status);
+            #vis async fn #decorated() -> pheasant::Response {
+                let mut resp = pheasant::Response::failing(#status);
                 let data = #failure().await;
                 resp.update_body(data);
 
@@ -85,7 +85,7 @@ impl FailureInscriptions for FailurePoet {
         let fun = &self.fun;
         let vis = fun.vis();
         let mime = self.mime();
-        let status = self.status();
+        let status = self.status;
 
         let bundler = &fun.sig.ident;
         let maybe_decorated = if self.decorated {

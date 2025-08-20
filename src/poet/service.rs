@@ -197,7 +197,7 @@ impl ServiceInscriptions for ServicePoet {
         quote! {
             #vis async fn #preflight(origin: pheasant::RequestOrigin, proto: pheasant::Protocol) -> pheasant::Response {
                 let mut resp = pheasant::Response::preflight(& #cors .unwrap(), origin.origin());
-                resp.update_status(pheasant::Status::Successful(pheasant::Successful::NoContent), None, "");
+                resp.update_status(pheasant::Status::Successful(pheasant::Successful::NoContent), None, None);
                 resp.update_proto(proto);
 
                 resp

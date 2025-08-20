@@ -64,7 +64,7 @@ where
                 .into_iter()
                 .map(|l| str_lit(l))
                 .filter(|res| res.is_ok())
-                .map(|res| res.unwrap().parse::<Url>().unwrap().downcast::<Origin>())
+                .map(|res| res.unwrap().parse::<Url>().unwrap().interpret::<Origin>())
                 .filter(|ori| ori.is_ok())
                 .map(|ori| ori.unwrap()),
         );
