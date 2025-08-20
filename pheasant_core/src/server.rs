@@ -1,0 +1,217 @@
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::net::{Ipv4Addr, TcpListener, TcpStream};
+
+use super::{
+    ClientError, Failure, Method, PheasantError, PheasantResult, Protocol, Redirection, Request,
+    Response, ResponseStatus, Route, ServerError, Service, ServiceBundle, Status, Successful,
+};
+
+// TODO dont allow the registration of 2 Services that point to the same Route
+// TODO dont allow the registration of 2 Failures that handle the same Status
+
+/// the http server type
+pub struct Server {
+    /// the server tcp listener socket
+    socket: TcpListener,
+    /// container for the server services
+    services: Vec<Service>,
+    // container for the server error responses (client/server errors)
+    errors: Vec<Failure>,
+}
+
+// WARN when responding to a credentialed request, the CORS glob/* header value is not allowed for the following headers
+// Access-Control-Allow-Origin, Access-Control-Allow-Headers, Access-Control-Allow-Methods and Access-Control-Expose-Headers
+// TODO Server.origins { whitelist, blacklist }
+
+impl Server {
+    /// creates a new server
+    ///
+    /// ```
+    /// let (addr, port) = ([127.0.0.1], 8883);
+    /// let workers = 90000;
+    /// let server = Server::new(workers, addr, port)
+    /// ```
+    ///
+    /// ### Error
+    ///
+    pub fn new(addr: impl Into<Ipv4Addr>, mut port: u16, max: usize) -> PheasantResult<Self> {
+        Ok(Self {
+            socket: {
+                let addr = addr.into();
+                let mut socket = TcpListener::bind((addr, port));
+                while socket.is_err() {
+                    port += 1;
+                    socket = TcpListener::bind((addr, port));
+                }
+
+                println!(
+                    "\x1b[1;38;2;237;203;244mServer bound at http://{}:{}\x1b[0m",
+                    addr, port
+                );
+
+                socket?
+            },
+            services: vec![],
+            errors: vec![],
+        })
+    }
+
+    /// pushes a new service to the server
+    pub fn service<S, B>(&mut self, s: S) -> &mut Self
+    where
+        S: Fn() -> B,
+        B: ServiceBundle,
+    {
+        self.services.extend(s().bundle_iter());
+
+        self
+    }
+
+    pub fn error<E>(&mut self, e: E) -> &mut Self
+    where
+        E: Fn() -> Failure,
+    {
+        self.errors.push(e());
+
+        self
+    }
+}
+
+impl Server {
+    /// searches for the specified service
+    /// returns `(Status, &Service)`
+    ///
+    /// ### Error
+    /// returns an Err, a client error (404 not found) if the service is not found
+    pub fn service_status(
+        &self,
+        method: Method,
+        route: &str,
+    ) -> PheasantResult<(Status, &Service)> {
+        match self
+            .services
+            .iter()
+            // .inspect(|s| println!("{}:{:?}", s.route(), s.re()))
+            .find(move |s| {
+                if method == Method::Options {
+                    s.method() == Method::Options
+                        && (s.route() == route
+                            || self.services.iter().any(|s| s.redirects_to(route)))
+                } else {
+                    s.method() == method && (s.route() == route || s.redirects_to(&route))
+                }
+            }) {
+            Some(s) if s.route() == route => Ok((Status::Successful(Successful::OK), s)),
+            Some(s) if s.redirects_to(&route) => {
+                Ok((Status::Redirection(Redirection::SeeOther), s))
+            }
+            Some(s) if s.method() == Method::Options => {
+                Ok((Status::Successful(Successful::NoContent), s))
+            }
+            None => Err(PheasantError::ClientError(ClientError::NotFound)),
+            Some(_) => unreachable!(
+                "logic break: the Service that matches the conditions didnt match the condititons"
+            ),
+        }
+    }
+
+    /// searches for the speficied `Fail` (error status fallback service)
+    /// returns `Some(&Fail)` if found
+    /// else returns `None`
+    pub fn fail_status(&self, status_code: u16) -> Option<&Failure> {
+        self.errors.iter().find(move |e| e.code() == status_code)
+    }
+
+    /// launch the service
+    /// listening for incoming tcp streams
+    /// and handling them
+    pub async fn serve(&mut self) {
+        for stream in self.socket.incoming().flatten() {
+            if let Err(e) = self.handle_stream(stream).await {
+                // TODO log the error or something
+                println!("{:?}", e);
+            }
+        }
+    }
+
+    // handles a tcp stream connection
+    async fn handle_stream(&self, mut stream: TcpStream) -> PheasantResult<TcpStream> {
+        let req = Request::from_stream(&mut stream);
+        println!("{:#?}\n", req); // if req is err we return a status error response
+        let Ok(req) = req else {
+            let resp = self.error_template(400, None).await;
+
+            return send_response(stream, resp);
+        };
+
+        let resp = match self.service_status(req.method(), req.route()) {
+            Ok((status, service)) => Response::payload(req, status, service).await,
+            Err(PheasantError::ClientError(ClientError::NotFound)) => {
+                self.error_template(404, Some(req.proto())).await
+            }
+            _ => unimplemented!("not implemented yet"),
+        };
+
+        send_response(stream, resp)
+    }
+
+    // TODO this and Response::from_err have become redundant since (Failure.callback)() now returns
+    // a Response
+    // TODO fix Response mess
+    pub async fn error_template(&self, code: u16, proto: Option<Protocol>) -> Response {
+        let fail = self.fail_status(code);
+        Response::from_err(fail, proto)
+            .await
+            .unwrap_or(Response::not_implemented().await)
+    }
+}
+
+// sends the response to the client and returns the connection tcp stream
+fn send_response(mut stream: TcpStream, resp: Response) -> PheasantResult<TcpStream> {
+    let payload = resp.respond();
+
+    stream.write_all(&payload)?;
+    stream.flush()?;
+
+    Ok(stream)
+}
+
+// #[deprecated(note = "replaced by Request::from_stream")]
+// async fn read_stream(s: &mut TcpStream) -> PheasantResult<String> {
+//     let mut data = Vec::new();
+//     let mut reader = BufReader::new(s);
+//     let mut buf = [0; 1024];
+//     loop {
+//         let Ok(n) = reader.read(&mut buf) else {
+//             return Err(PheasantError::StreamReadCrached);
+//         };
+//         if n < 1024 {
+//             break data.extend(&buf[..n]);
+//         } else if n > 1024 {
+//             return Err(PheasantError::StreamReadWithExcess);
+//         }
+//         data.extend(buf);
+//     }
+//
+//     String::from_utf8(data).map_err(|e| e.into())
+// }
+
+// #[deprecated(note = "replaced by Response::respond")]
+// fn format_response(payload: Vec<u8>, ct: &Mime) -> Vec<u8> {
+//     let cl = payload.len();
+//     let mut res: Vec<u8> = format!(
+//         "HTTP/1.1 200 OK\r\nAccept-Range: bytes\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n",
+//         ct, cl
+//     )
+//     .into_bytes();
+//     res.extend(payload);
+//     res.extend([13, 10]);
+//
+//     res
+// }
+
+impl From<&Request> for () {
+    fn from(_: &Request) -> () {
+        ()
+    }
+}
