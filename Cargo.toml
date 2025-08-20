@@ -1,0 +1,3 @@
+[workspace]
+resolver = "3"
+members = ["pheasant_core", "pheasant", "pheasant_uri", "pheasant_macro_utils", "pheasant_macro_get", "pheasant_macro_post", "pheasant_macro_fail"]
