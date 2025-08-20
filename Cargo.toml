@@ -5,27 +5,44 @@ edition = "2024"
 
 [workspace]
 resolver = "3"
-members = ["pheasant_core", "pheasant", "pheasant_uri", "pheasant_macro_utils", "pheasant_macro_get", "pheasant_macro_post", "pheasant_macro_fail"]
+members = [
+	"crates/pheasant_core",
+	"crates/pheasant_uri",
+	"crates/pheasant_macro_utils",
+	"macros/pheasant_macro_get",
+	"macros/pheasant_macro_post",
+	"macros/pheasant_macro_fail",
+]
+
+[[example]]
+name = "dev"
+path = "src/main.rs"
 
 [workspace.dependencies]
 chrono = { version = "0.4.41", features = ["serde"] }
-syn = { version = "2.0.104", features = ["extra-traits", "full", "parsing", "printing"] }
 proc-macro2 = "1.0.95"
+syn = { version = "2.0.104", features = [
+	"extra-traits",
+	"full",
+	"parsing",
+	"printing",
+] }
 quote = "1.0.40"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.142"
 crossbeam-channel = "0.5.15"
+tokio = { version = "1.46.1", features = ["full"] }
 deflate = { version = "1.0.0", features = ["gzip"] }
 mime = "0.3.17"
-
-[[bin]]
-name = "dev"
-path = "src/main.rs"
+rustls = { version = "0.23.31", features = ["ring"] }
+rustls-pki-types = "1.12.0"
+rcgen = "0.14.3"
+url = "2.5.4"
 
 [dependencies]
-pheasant_core = { version = "0.1.0", path = "../pheasant_core" }
-pheasant_uri = { version = "0.1.0", path = "../pheasant_uri" }
-pheasant_macro_utils = { version = "0.1.0", path = "../pheasant_macro_utils" }
-pheasant_macro_get = { version = "0.1.1", path = "../pheasant_macro_get" }
-pheasant_macro_post = { version = "0.1.0", path = "../pheasant_macro_post" }
-pheasant_macro_fail = { version = "0.1.0", path = "../pheasant_macro_fail" }
+pheasant_core = { version = "0.1.0", path = "crates/pheasant_core" }
+pheasant_uri = { version = "0.1.0", path = "crates/pheasant_uri" }
+pheasant_macro_utils = { version = "0.1.0", path = "crates/pheasant_macro_utils" }
+pheasant_macro_get = { version = "0.1.1", path = "macros/pheasant_macro_get" }
+pheasant_macro_post = { version = "0.1.0", path = "macros/pheasant_macro_post" }
+pheasant_macro_fail = { version = "0.1.0", path = "macros/pheasant_macro_fail" }

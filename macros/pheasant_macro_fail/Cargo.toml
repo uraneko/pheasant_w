@@ -11,4 +11,4 @@ name = "dev"
 path = "src/main.rs"
 
 [dependencies]
-pheasant_macro_utils = { version = "0.1.0", path = "../pheasant_macro_utils" }
+pheasant_macro_utils = { version = "0.1.0", path = "../../crates/pheasant_macro_utils" }

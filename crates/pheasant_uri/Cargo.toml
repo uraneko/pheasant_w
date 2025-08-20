@@ -15,17 +15,17 @@ path = "tests/lex.rs"
 name = "dev"
 path = "src/main.rs"
 
-[[bin]]
+[[bench]]
 name = "finder"
 path = "benches/finder.rs"
 
-[[bin]]
+[[bench]]
 name = "lexer"
 path = "benches/lexer.rs"
 
 [dependencies]
-proc-macro2 = "1.0.95"
-quote = "1.0.40"
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.142"
-syn = { version = "2.0.104", features = ["printing", "full", "parsing", "extra-traits"] }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

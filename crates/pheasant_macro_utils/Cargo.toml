@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-chrono = { version = "0.4.41", features = ["serde"] }
-proc-macro2 = "1.0.95"
-quote = "1.0.40"
-syn = { version = "2.0.104", features = ["parsing", "full", "extra-traits"] }
+chrono = { workspace = true }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }
+serde_json = { workspace = true }
 pheasant_core = { version = "0.1.0", path = "../pheasant_core" }
 pheasant_uri = { version = "0.1.0", path = "../pheasant_uri" }
-serde_json = "1.0.142"
