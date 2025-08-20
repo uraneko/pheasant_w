@@ -15,8 +15,8 @@ members = [
 ]
 
 [[example]]
-name = "dev"
-path = "src/main.rs"
+name = "e1"
+path = "src/basic.rs"
 
 [workspace.dependencies]
 chrono = { version = "0.4.41", features = ["serde"] }
