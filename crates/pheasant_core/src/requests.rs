@@ -3,7 +3,7 @@ use std::io::{BufRead, BufReader, Read};
 use std::net::TcpStream;
 
 use super::{ClientError, Header, HeaderMap, Method, PheasantError, PheasantResult, Protocol};
-use pheasant_uri::{Query, Resource, Route};
+use pheasant_uri::{Query, Route, Scheme, Url};
 
 /// HTTP Request type
 /// used in services to generate service input type; R: From<Request>
@@ -12,6 +12,7 @@ pub struct Request {
     method: Method,
     proto: Protocol,
     route: Route,
+    scheme: Option<Scheme>,
     query: Option<Query>,
     body: Option<String>,
     headers: HashMap<String, String>,
@@ -23,13 +24,15 @@ impl Request {
     /// ### Error
     ///
     /// returns a `PheasantError` in case of a bad request
-    pub(crate) fn from_stream(stream: &mut TcpStream) -> PheasantResult<Self> {
+    pub(crate) fn from_stream<R: Read>(stream: &mut R) -> PheasantResult<Self> {
         let mut v = vec![];
         let mut reader = BufReader::new(stream);
         // if error we return 400 bad request
         _ = read_req_line(&mut v, &mut reader)?;
-        let (method, mut resource, proto) = parse_req_line(&mut v.drain(..))?;
-        let (route, query) = (resource.take_route(), resource.take_query());
+        let (method, mut url, proto) = parse_req_line(&mut v.drain(..))?;
+        println!("{}", url.to_string());
+        let (scheme, route, query) = (url.scheme(), url.take_path(), url.take_query());
+        let route = Route::new(route.unwrap());
 
         let headers = read_parse_headers(&mut v, &mut reader)?;
 
@@ -47,6 +50,7 @@ impl Request {
         Ok(Self {
             method,
             proto,
+            scheme,
             route,
             query,
             body,
@@ -173,14 +177,14 @@ impl HeaderMap for Request {
     }
 }
 
-fn read_req_line(v: &mut Vec<u8>, s: &mut BufReader<&mut TcpStream>) -> PheasantResult<usize> {
+fn read_req_line<R: Read>(v: &mut Vec<u8>, s: &mut BufReader<&mut R>) -> PheasantResult<usize> {
     s.read_until(10, v)
         .map_err(|_| PheasantError::ClientError(ClientError::BadRequest))
 }
 
 fn parse_req_line(
     bytes: &mut impl Iterator<Item = u8>,
-) -> Result<(Method, Resource, Protocol), PheasantError> {
+) -> Result<(Method, Url, Protocol), PheasantError> {
     let mut val = vec![];
     while let Some(b) = bytes.next()
         && b != 32
@@ -195,7 +199,7 @@ fn parse_req_line(
     {
         val.push(b);
     }
-    let Ok(resource) = str::from_utf8(&val).unwrap().parse::<Resource>() else {
+    let Ok(url) = str::from_utf8(&val).unwrap().parse::<Url>() else {
         return Err(PheasantError::ClientError(ClientError::BadRequest));
     };
 
@@ -209,12 +213,12 @@ fn parse_req_line(
         });
     let proto = Protocol::try_from(proto.as_slice())?;
 
-    Ok((method, resource, proto))
+    Ok((method, url, proto))
 }
 
-fn read_parse_headers(
+fn read_parse_headers<R: Read>(
     v: &mut Vec<u8>,
-    s: &mut BufReader<&mut TcpStream>,
+    s: &mut BufReader<&mut R>,
 ) -> PheasantResult<HashMap<String, String>> {
     let mut map = HashMap::new();
 
@@ -251,7 +255,11 @@ fn read_parse_headers(
 
 // WARN rn, if no content len header is found, server ignores request body
 // TODO handle body with missing content length
-fn read_body(v: &mut Vec<u8>, s: &mut BufReader<&mut TcpStream>, len: usize) -> PheasantResult<()> {
+fn read_body<R: Read>(
+    v: &mut Vec<u8>,
+    s: &mut BufReader<&mut R>,
+    len: usize,
+) -> PheasantResult<()> {
     v.resize(len, 0);
     s.read_exact(v)?;
 
