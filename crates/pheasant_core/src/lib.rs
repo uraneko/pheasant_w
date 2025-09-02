@@ -1,3 +1,5 @@
+#![forbid(clippy::unwrap_used, clippy::expect_used)]
+// #![no_std]
 // #![allow(unused_imports)]
 // #![allow(dead_code)]
 // #![allow(unused_variables)]
@@ -21,6 +23,7 @@ pub mod requests;
 pub mod response;
 pub mod server;
 pub mod service;
+pub mod socket;
 pub mod status;
 pub mod tls;
 
@@ -33,6 +36,7 @@ pub use requests::Request;
 pub use response::Response;
 pub use server::Server;
 pub use service::Service;
+pub use socket::HttpSocket;
 pub use status::{
     ClientError, ErrorStatus, Informational, Redirection, ResponseStatus, ServerError, Status,
     Successful,
@@ -287,30 +291,48 @@ impl FromStr for Protocol {
 }
 
 pub trait ServiceBundle {
-    fn bundle_iter(self) -> std::vec::IntoIter<Service>;
+    fn iter(self) -> std::vec::IntoIter<Service>;
+
+    fn size(&self) -> usize;
 }
 
 impl ServiceBundle for Service {
-    fn bundle_iter(self) -> std::vec::IntoIter<Service> {
+    fn iter(self) -> std::vec::IntoIter<Service> {
         vec![self].into_iter()
+    }
+
+    fn size(&self) -> usize {
+        1
     }
 }
 
 impl ServiceBundle for [Service; 2] {
-    fn bundle_iter(self) -> std::vec::IntoIter<Service> {
+    fn iter(self) -> std::vec::IntoIter<Service> {
         Vec::from(self).into_iter()
+    }
+
+    fn size(&self) -> usize {
+        2
     }
 }
 
 impl ServiceBundle for [Service; 3] {
-    fn bundle_iter(self) -> std::vec::IntoIter<Service> {
+    fn iter(self) -> std::vec::IntoIter<Service> {
         Vec::from(self).into_iter()
+    }
+
+    fn size(&self) -> usize {
+        3
     }
 }
 
 impl ServiceBundle for Vec<Service> {
-    fn bundle_iter(self) -> std::vec::IntoIter<Service> {
+    fn iter(self) -> std::vec::IntoIter<Service> {
         self.into_iter()
+    }
+
+    fn size(&self) -> usize {
+        self.len()
     }
 }
 

@@ -1,3 +1,4 @@
+use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 
 use crate::{ErrorStatus, Mime, Response, ResponseStatus};
@@ -47,3 +48,17 @@ impl Failure {
         &self.fail
     }
 }
+
+impl Hash for Failure {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.status.hash(state);
+    }
+}
+
+impl PartialEq for Failure {
+    fn eq(&self, other: &Self) -> bool {
+        self.status == other.status
+    }
+}
+
+impl Eq for Failure {}

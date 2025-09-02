@@ -1,6 +1,7 @@
 use serde::de::{Deserialize, Deserializer, Error, Visitor};
 use serde::ser::{Serialize, SerializeTupleStruct, Serializer};
 use std::fmt;
+use std::net::IpAddr;
 use std::str::FromStr;
 
 use super::TransmuteError;
@@ -48,6 +49,15 @@ impl FromStr for Origin {
 }
 
 impl Origin {
+    pub fn from_parts(scheme: Scheme, ip: IpAddr, port: u16) -> Self {
+        Self {
+            scheme,
+            port: Some(port),
+            domain: ip.to_string(),
+        }
+    }
+
+    /// returns string repr of this domain
     pub fn domains(&self) -> std::str::Split<'_, char> {
         self.domain.split('/')
     }
@@ -62,6 +72,7 @@ impl Origin {
         self.domains().next().unwrap()
     }
 
+    /// second level domain of this origin
     pub fn sld(&self) -> &str {
         self.domains().rev().skip(1).next().unwrap()
     }

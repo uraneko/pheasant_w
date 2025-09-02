@@ -1,9 +1,11 @@
+use hashbrown::HashSet;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
 
 use super::{
-    ClientError, Failure, Method, PheasantError, PheasantResult, Protocol, Redirection, Request,
-    Response, ResponseStatus, Route, ServerError, Service, ServiceBundle, Status, Successful,
+    ClientError, Failure, HttpSocket, Method, PheasantError, PheasantResult, Protocol, Redirection,
+    Request, Response, ResponseStatus, Route, ServerError, Service, ServiceBundle, Status,
+    Successful,
 };
 
 // TODO dont allow the registration of 2 Services that point to the same Route
@@ -18,6 +20,13 @@ pub struct Server {
     // container for the server error responses (client/server errors)
     errors: Vec<Failure>,
 }
+
+// TODO this is new Server
+pub struct Serverr {
+    sockets: HashSet<HttpSocket>,
+}
+
+pub struct ServerBuilder {}
 
 // WARN when responding to a credentialed request, the CORS glob/* header value is not allowed for the following headers
 // Access-Control-Allow-Origin, Access-Control-Allow-Headers, Access-Control-Allow-Methods and Access-Control-Expose-Headers
@@ -34,7 +43,7 @@ impl Server {
     ///
     /// ### Error
     ///
-    pub fn new(addr: impl Into<Ipv4Addr>, mut port: u16, max: usize) -> PheasantResult<Self> {
+    pub fn new(addr: impl Into<Ipv4Addr>, mut port: u16) -> PheasantResult<Self> {
         Ok(Self {
             socket: {
                 let addr = addr.into();
@@ -55,26 +64,6 @@ impl Server {
             errors: vec![],
         })
     }
-
-    /// pushes a new service to the server
-    pub fn service<S, B>(&mut self, s: S) -> &mut Self
-    where
-        S: Fn() -> B,
-        B: ServiceBundle,
-    {
-        self.services.extend(s().bundle_iter());
-
-        self
-    }
-
-    pub fn error<E>(&mut self, e: E) -> &mut Self
-    where
-        E: Fn() -> Failure,
-    {
-        self.errors.push(e());
-
-        self
-    }
 }
 
 impl Server {
@@ -88,11 +77,12 @@ impl Server {
         method: Method,
         route: &str,
     ) -> PheasantResult<(Status, &Service)> {
+        // FIXME this suddenly broke after implementing Hash, Eq, PartialEq on Service
         match self
             .services
             .iter()
             // .inspect(|s| println!("{}:{:?}", s.route(), s.re()))
-            .find(move |s| {
+            .find(|s| {
                 if method == Method::Options {
                     s.method() == Method::Options
                         && (s.route() == route
@@ -101,11 +91,11 @@ impl Server {
                     s.method() == method && (s.route() == route || s.redirects_to(&route))
                 }
             }) {
-            Some(s) if s.route() == route => Ok((Status::Successful(Successful::OK), s)),
-            Some(s) if s.redirects_to(&route) => {
+            Some(ref s) if s.route() == route => Ok((Status::Successful(Successful::OK), s)),
+            Some(ref s) if s.redirects_to(&route) => {
                 Ok((Status::Redirection(Redirection::SeeOther), s))
             }
-            Some(s) if s.method() == Method::Options => {
+            Some(ref s) if s.method() == Method::Options => {
                 Ok((Status::Successful(Successful::NoContent), s))
             }
             None => Err(PheasantError::ClientError(ClientError::NotFound)),

@@ -22,4 +22,5 @@ syn = { workspace = true }
 rustls = { workspace = true }
 rustls-pki-types = { workspace = true }
 rcgen = { workspace = true }
+hashbrown = { workspace = true }
 pheasant_uri = { version = "0.1.0", path = "../pheasant_uri" }

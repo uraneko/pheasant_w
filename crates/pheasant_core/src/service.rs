@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 
 use crate::{Cors, Method, Mime, Protocol, Request, Response};
@@ -123,3 +124,18 @@ impl Service {
         self.cors.is_some()
     }
 }
+
+impl Hash for Service {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.method.hash(state);
+        self.route.hash(state);
+    }
+}
+
+impl PartialEq for Service {
+    fn eq(&self, other: &Self) -> bool {
+        self.method == other.method && self.route == other.route
+    }
+}
+
+impl Eq for Service {}
