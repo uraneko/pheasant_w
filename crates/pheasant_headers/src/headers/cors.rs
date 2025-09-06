@@ -26,14 +26,14 @@ impl FromHeaders for RequestedCors {
 
     fn from_headers(h: &mut HashMap<String, String>) -> HttpResult<Self> {
         let [Some(origin), Some(method)] = [
-            h.remove("origin"),
-            h.remove("access_control_request_method"),
+            h.remove("Origin"),
+            h.remove("Access_Control_Request_Method"),
         ] else {
             // NOTE could also use 422 maybe
             return Err(ErrorStatus::Client(ClientError::BadRequest));
         };
 
-        let headers = h.remove("access_control_request_headers");
+        let headers = h.remove("Access_Control_Request_Headers");
 
         Ok(Self {
             origin,
@@ -50,6 +50,7 @@ pub struct RegisteredCors {
     /// allowed cors req headers
     headers: HashSet<String>,
     /// the server allows these headers to be exposed to the used in the client side
+    /// see https://developer.mozilla.org/en-US/docs/Glossary/CORS-safelisted_response_header
     expose: Option<HashSet<String>>,
     /// set of whitelisted origins or glob '*' to allow any origin
     origins: WildCardish<HashSet<Origin>>,
